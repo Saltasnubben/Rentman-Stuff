@@ -89,7 +89,7 @@ function App() {
               </div>
               <div>
                 <h1 className="text-xl font-bold text-gray-900 dark:text-white">Rentman Booking Visualizer</h1>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Översikt över crew-bokningar</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Din livboj i personal-djungeln.</p>
               </div>
             </div>
             <div className="flex items-center gap-4">
@@ -225,10 +225,7 @@ function App() {
       <footer className="bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 mt-auto">
         <div className="px-4 sm:px-6 lg:px-8 py-4">
           <p className="text-center text-sm text-gray-500 dark:text-gray-400">
-            Rentman Booking Visualizer &middot; Powered by{' '}
-            <a href="https://rentman.io" target="_blank" rel="noopener noreferrer" className="text-primary-600 dark:text-primary-400 hover:underline">
-              Rentman API
-            </a>
+            Rentman Booking Visualizer &middot; By Saltasnubben
           </p>
         </div>
       </footer>
