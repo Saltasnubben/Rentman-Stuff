@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { format, addDays, startOfDay } from 'date-fns';
 import { sv } from 'date-fns/locale';
 import CrewSelector from './components/CrewSelector';
@@ -15,6 +15,7 @@ function App() {
   const [availableTags, setAvailableTags] = useState([]);
   const [viewMode, setViewMode] = useState('crew'); // 'crew' or 'project'
   const [showAppointments, setShowAppointments] = useState(true);
+  const [autoRefresh, setAutoRefresh] = useState(false);
   const [dateRange, setDateRange] = useState({
     start: startOfDay(new Date()),
     end: startOfDay(addDays(new Date(), 7))
@@ -23,6 +24,7 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [apiStatus, setApiStatus] = useState(null);
+  const [lastRefresh, setLastRefresh] = useState(null);
 
   // Load crew members on mount
   useEffect(() => {
@@ -63,6 +65,7 @@ function App() {
       });
 
       setBookings(response.data);
+      setLastRefresh(new Date());
     } catch (err) {
       console.error('Failed to load bookings:', err);
       setError('Kunde inte ladda bokningar. Försök igen.');
@@ -74,6 +77,24 @@ function App() {
   useEffect(() => {
     loadBookings();
   }, [loadBookings]);
+
+  // Auto-refresh every 30 seconds when enabled
+  useEffect(() => {
+    if (!autoRefresh || selectedCrew.length === 0) return;
+
+    const interval = setInterval(() => {
+      loadBookings();
+    }, 30000);
+
+    return () => clearInterval(interval);
+  }, [autoRefresh, loadBookings, selectedCrew.length]);
+
+  // Manual refresh handler
+  const handleRefresh = () => {
+    if (!loading) {
+      loadBookings();
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors">
@@ -93,6 +114,34 @@ function App() {
               </div>
             </div>
             <div className="flex items-center gap-4">
+              {/* Refresh controls */}
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={handleRefresh}
+                  disabled={loading || selectedCrew.length === 0}
+                  className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  title="Uppdatera data"
+                >
+                  <svg
+                    className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  Uppdatera
+                </button>
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={autoRefresh}
+                    onChange={(e) => setAutoRefresh(e.target.checked)}
+                    className="w-4 h-4 text-primary-600 bg-gray-100 border-gray-300 rounded focus:ring-primary-500 dark:focus:ring-primary-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600"
+                  />
+                  <span className="text-sm text-gray-700 dark:text-gray-300">Auto (30s)</span>
+                </label>
+              </div>
               <ThemeSelector />
               <StatusBar status={apiStatus} loading={loading} />
             </div>
