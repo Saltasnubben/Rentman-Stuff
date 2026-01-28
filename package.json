@@ -1,0 +1,19 @@
+{
+  "name": "rentman-booking-visualizer",
+  "version": "1.0.0",
+  "description": "Webapp för att visualisera Rentman crew-bokningar",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently \"npm run dev:api\" \"npm run dev:frontend\"",
+    "dev:api": "php -S localhost:8080 api/router.php",
+    "dev:frontend": "npm run dev --prefix frontend",
+    "build": "npm run build --prefix frontend",
+    "install:frontend": "npm install --prefix frontend"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
