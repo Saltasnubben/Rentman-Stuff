@@ -25,7 +25,6 @@ jobs:
           port: ${{ secrets.FTP_PORT }}
           local-dir: ./public/
           server-dir: ./
-          dry-run: true
           exclude: |
             **/.git*
             **/.git*/**
