@@ -30,10 +30,11 @@ export async function fetchCrewMember(id) {
 /**
  * Fetch bookings for a single crew member within a date range
  */
-export async function fetchCrewBookings(crewId, startDate, endDate) {
+export async function fetchCrewBookings(crewId, startDate, endDate, includeAppointments = true) {
   const params = {
     startDate: format(startDate, 'yyyy-MM-dd'),
-    endDate: format(endDate, 'yyyy-MM-dd')
+    endDate: format(endDate, 'yyyy-MM-dd'),
+    includeAppointments: includeAppointments ? 'true' : 'false'
   };
 
   const response = await api.get(`/crew/${crewId}/bookings`, { params });
@@ -44,14 +45,14 @@ export async function fetchCrewBookings(crewId, startDate, endDate) {
  * Fetch bookings for multiple crew members within a date range
  * Fetches each crew member's bookings in parallel
  */
-export async function fetchBookings({ crewIds, startDate, endDate }) {
+export async function fetchBookings({ crewIds, startDate, endDate, includeAppointments = true }) {
   if (!crewIds || crewIds.length === 0) {
     return { data: [], count: 0 };
   }
 
   // Fetch bookings for each crew member in parallel
   const promises = crewIds.map(crewId =>
-    fetchCrewBookings(crewId, startDate, endDate)
+    fetchCrewBookings(crewId, startDate, endDate, includeAppointments)
       .then(result => ({
         crewId,
         bookings: result.data || []

@@ -14,6 +14,7 @@ function App() {
   const [selectedCrew, setSelectedCrew] = useState([]);
   const [availableTags, setAvailableTags] = useState([]);
   const [viewMode, setViewMode] = useState('crew'); // 'crew' or 'project'
+  const [showAppointments, setShowAppointments] = useState(true);
   const [dateRange, setDateRange] = useState({
     start: startOfDay(new Date()),
     end: startOfDay(addDays(new Date(), 7))
@@ -57,7 +58,8 @@ function App() {
       const response = await fetchBookings({
         crewIds: selectedCrew.map(c => c.id),
         startDate: dateRange.start,
-        endDate: dateRange.end
+        endDate: dateRange.end,
+        includeAppointments: showAppointments
       });
 
       setBookings(response.data);
@@ -67,7 +69,7 @@ function App() {
     } finally {
       setLoading(false);
     }
-  }, [selectedCrew, dateRange]);
+  }, [selectedCrew, dateRange, showAppointments]);
 
   useEffect(() => {
     loadBookings();
@@ -155,7 +157,23 @@ function App() {
         {/* View toggle and Timeline */}
         {selectedCrew.length > 0 && (
           <>
-            <div className="flex justify-end mb-4">
+            <div className="flex items-center justify-between mb-4">
+              {/* Appointments toggle */}
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={showAppointments}
+                  onChange={(e) => setShowAppointments(e.target.checked)}
+                  className="w-4 h-4 text-primary-600 bg-gray-100 border-gray-300 rounded focus:ring-primary-500 dark:focus:ring-primary-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600"
+                />
+                <span className="text-sm text-gray-700 dark:text-gray-300 flex items-center gap-1.5">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                  Visa kalenderbokningar
+                </span>
+              </label>
+
               <ViewToggle view={viewMode} onChange={setViewMode} />
             </div>
             <Timeline
@@ -170,18 +188,26 @@ function App() {
 
         {/* Stats */}
         {selectedCrew.length > 0 && bookings.length > 0 && (
-          <div className="mt-6 grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div className="mt-6 grid grid-cols-2 sm:grid-cols-5 gap-4">
             <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4">
               <div className="text-2xl font-bold text-gray-900 dark:text-white">{selectedCrew.length}</div>
               <div className="text-sm text-gray-500 dark:text-gray-400">Valda crewmedlemmar</div>
             </div>
             <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4">
-              <div className="text-2xl font-bold text-primary-600 dark:text-primary-400">{bookings.length}</div>
-              <div className="text-sm text-gray-500 dark:text-gray-400">Bokningar</div>
+              <div className="text-2xl font-bold text-primary-600 dark:text-primary-400">
+                {bookings.filter(b => b.type === 'project').length}
+              </div>
+              <div className="text-sm text-gray-500 dark:text-gray-400">Projektbokningar</div>
+            </div>
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4">
+              <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">
+                {bookings.filter(b => b.type === 'appointment').length}
+              </div>
+              <div className="text-sm text-gray-500 dark:text-gray-400">Kalenderbokningar</div>
             </div>
             <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4">
               <div className="text-2xl font-bold text-gray-900 dark:text-white">
-                {new Set(bookings.map(b => b.projectId)).size}
+                {new Set(bookings.filter(b => b.projectId).map(b => b.projectId)).size}
               </div>
               <div className="text-sm text-gray-500 dark:text-gray-400">Unika projekt</div>
             </div>
