@@ -69,6 +69,24 @@ function Timeline({ crew, bookings, dateRange, loading, viewMode = 'crew' }) {
     return member?.color || '#3b82f6';
   };
 
+  // Helper to lighten a color for appointments
+  const lightenColor = (hex, percent = 30) => {
+    // Remove # if present
+    hex = hex.replace('#', '');
+
+    // Parse RGB
+    let r = parseInt(hex.substring(0, 2), 16);
+    let g = parseInt(hex.substring(2, 4), 16);
+    let b = parseInt(hex.substring(4, 6), 16);
+
+    // Lighten
+    r = Math.min(255, r + (255 - r) * (percent / 100));
+    g = Math.min(255, g + (255 - g) * (percent / 100));
+    b = Math.min(255, b + (255 - b) * (percent / 100));
+
+    return `rgb(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)})`;
+  };
+
   // Calculate position and width for a booking bar
   const getBookingStyle = (booking, color) => {
     const bookingStart = startOfDay(parseISO(booking.start));
@@ -84,12 +102,30 @@ function Timeline({ crew, bookings, dateRange, loading, viewMode = 'crew' }) {
     const left = (startOffset / totalDays) * 100;
     const width = (duration / totalDays) * 100;
 
+    const isAppointment = booking.type === 'appointment';
+
+    // Use booking's own color if available, otherwise fall back to crew color
+    let baseColor;
+    if (booking.color) {
+      // Rentman colors don't have # prefix
+      baseColor = booking.color.startsWith('#') ? booking.color : `#${booking.color}`;
+    } else {
+      baseColor = color || booking.projectColor || '#3b82f6';
+    }
+
     return {
       left: `${Math.max(0, left)}%`,
       width: `${Math.min(100 - left, width)}%`,
-      backgroundColor: color || booking.projectColor || '#3b82f6'
+      backgroundColor: isAppointment ? lightenColor(baseColor, 20) : baseColor
     };
   };
+
+  // Calendar icon component for appointments
+  const CalendarIcon = () => (
+    <svg className="w-4 h-4 text-white/70 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+    </svg>
+  );
 
   if (loading) {
     return (
@@ -175,48 +211,59 @@ function Timeline({ crew, bookings, dateRange, loading, viewMode = 'crew' }) {
                   </div>
                 ) : (
                   <div className="relative h-full">
-                    {memberBookings.map((booking, index) => (
-                      <div
-                        key={booking.id}
-                        className="absolute rounded-md shadow-sm cursor-pointer transition-transform hover:scale-[1.02] hover:shadow-md group"
-                        style={{
-                          ...getBookingStyle(booking),
-                          top: `${index * 52 + 4}px`,
-                          height: '48px'
-                        }}
-                        title={`${booking.projectName}\n${booking.role}\n${format(parseISO(booking.start), 'HH:mm')} - ${format(parseISO(booking.end), 'HH:mm')}`}
-                      >
-                        <div className="h-full px-3 py-1 flex flex-col justify-center overflow-hidden">
-                          <span className="text-white text-sm font-semibold truncate drop-shadow-sm">
-                            {booking.projectName}
-                          </span>
-                          <span className="text-white/80 text-xs truncate drop-shadow-sm">
-                            {booking.role !== booking.projectName ? booking.role : ''}
-                            {format(parseISO(booking.start), 'HH:mm')} - {format(parseISO(booking.end), 'HH:mm')}
-                          </span>
-                        </div>
-
-                        {/* Tooltip */}
-                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
-                          <div className="bg-gray-900 dark:bg-gray-700 text-white text-xs rounded-lg px-3 py-2 shadow-lg whitespace-nowrap">
-                            <div className="font-semibold text-sm">{booking.projectName}</div>
-                            {booking.role && booking.role !== booking.projectName && (
-                              <div className="text-gray-300">{booking.role}</div>
-                            )}
-                            <div className="text-gray-400 mt-1">
-                              {format(parseISO(booking.start), 'd MMM HH:mm', { locale: sv })} -{' '}
-                              {format(parseISO(booking.end), 'HH:mm', { locale: sv })}
+                    {memberBookings.map((booking, index) => {
+                      const isAppointment = booking.type === 'appointment';
+                      return (
+                        <div
+                          key={booking.id}
+                          className={`absolute rounded-md shadow-sm cursor-pointer transition-transform hover:scale-[1.02] hover:shadow-md group ${
+                            isAppointment ? 'border-2 border-white/30' : ''
+                          }`}
+                          style={{
+                            ...getBookingStyle(booking),
+                            top: `${index * 52 + 4}px`,
+                            height: '48px'
+                          }}
+                          title={`${booking.projectName}\n${booking.role}\n${format(parseISO(booking.start), 'HH:mm')} - ${format(parseISO(booking.end), 'HH:mm')}`}
+                        >
+                          <div className="h-full px-3 py-1 flex items-center justify-between overflow-hidden">
+                            <div className="flex flex-col justify-center min-w-0 flex-1">
+                              <span className="text-white text-sm font-semibold truncate drop-shadow-sm">
+                                {booking.projectName}
+                              </span>
+                              <span className="text-white/80 text-xs truncate drop-shadow-sm">
+                                {booking.role !== booking.projectName ? booking.role : ''}
+                                {format(parseISO(booking.start), 'HH:mm')} - {format(parseISO(booking.end), 'HH:mm')}
+                              </span>
                             </div>
-                            {booking.remark && (
-                              <div className="text-gray-400 mt-1 max-w-xs truncate">
-                                {booking.remark}
+                            {isAppointment && <CalendarIcon />}
+                          </div>
+
+                          {/* Tooltip */}
+                          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+                            <div className="bg-gray-900 dark:bg-gray-700 text-white text-xs rounded-lg px-3 py-2 shadow-lg whitespace-nowrap">
+                              <div className="font-semibold text-sm flex items-center gap-2">
+                                {booking.projectName}
+                                {isAppointment && <span className="text-xs text-gray-400">(Kalender)</span>}
                               </div>
-                            )}
-                            <div className="absolute left-1/2 -translate-x-1/2 top-full border-4 border-transparent border-t-gray-900 dark:border-t-gray-700" />
+                              {booking.role && booking.role !== booking.projectName && (
+                                <div className="text-gray-300">{booking.role}</div>
+                              )}
+                              <div className="text-gray-400 mt-1">
+                                {format(parseISO(booking.start), 'd MMM HH:mm', { locale: sv })} -{' '}
+                                {format(parseISO(booking.end), 'HH:mm', { locale: sv })}
+                              </div>
+                              {booking.remark && (
+                                <div className="text-gray-400 mt-1 max-w-xs truncate">
+                                  {booking.remark}
+                                </div>
+                              )}
+                              <div className="absolute left-1/2 -translate-x-1/2 top-full border-4 border-transparent border-t-gray-900 dark:border-t-gray-700" />
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -296,10 +343,13 @@ function Timeline({ crew, bookings, dateRange, loading, viewMode = 'crew' }) {
                 <div className="relative h-full">
                   {projectBookings.map((booking, index) => {
                     const crewColor = getCrewColor(booking.crewId);
+                    const isAppointment = booking.type === 'appointment';
                     return (
                       <div
                         key={booking.id}
-                        className="absolute rounded-md shadow-sm cursor-pointer transition-transform hover:scale-[1.02] hover:shadow-md group"
+                        className={`absolute rounded-md shadow-sm cursor-pointer transition-transform hover:scale-[1.02] hover:shadow-md group ${
+                          isAppointment ? 'border-2 border-white/30' : ''
+                        }`}
                         style={{
                           ...getBookingStyle(booking, crewColor),
                           top: `${index * 52 + 4}px`,
@@ -307,20 +357,26 @@ function Timeline({ crew, bookings, dateRange, loading, viewMode = 'crew' }) {
                         }}
                         title={`${getCrewName(booking.crewId)}\n${booking.role}\n${format(parseISO(booking.start), 'HH:mm')} - ${format(parseISO(booking.end), 'HH:mm')}`}
                       >
-                        <div className="h-full px-3 py-1 flex flex-col justify-center overflow-hidden">
-                          <span className="text-white text-sm font-semibold truncate drop-shadow-sm">
-                            {getCrewName(booking.crewId)}
-                          </span>
-                          <span className="text-white/80 text-xs truncate drop-shadow-sm">
-                            {booking.role && booking.role !== booking.projectName ? `${booking.role} · ` : ''}
-                            {format(parseISO(booking.start), 'HH:mm')} - {format(parseISO(booking.end), 'HH:mm')}
-                          </span>
+                        <div className="h-full px-3 py-1 flex items-center justify-between overflow-hidden">
+                          <div className="flex flex-col justify-center min-w-0 flex-1">
+                            <span className="text-white text-sm font-semibold truncate drop-shadow-sm">
+                              {getCrewName(booking.crewId)}
+                            </span>
+                            <span className="text-white/80 text-xs truncate drop-shadow-sm">
+                              {booking.role && booking.role !== booking.projectName ? `${booking.role} · ` : ''}
+                              {format(parseISO(booking.start), 'HH:mm')} - {format(parseISO(booking.end), 'HH:mm')}
+                            </span>
+                          </div>
+                          {isAppointment && <CalendarIcon />}
                         </div>
 
                         {/* Tooltip */}
                         <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
                           <div className="bg-gray-900 dark:bg-gray-700 text-white text-xs rounded-lg px-3 py-2 shadow-lg whitespace-nowrap">
-                            <div className="font-semibold text-sm">{getCrewName(booking.crewId)}</div>
+                            <div className="font-semibold text-sm flex items-center gap-2">
+                              {getCrewName(booking.crewId)}
+                              {isAppointment && <span className="text-xs text-gray-400">(Kalender)</span>}
+                            </div>
                             {booking.role && (
                               <div className="text-gray-300">{booking.role}</div>
                             )}
