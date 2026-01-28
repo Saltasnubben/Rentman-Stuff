@@ -1,0 +1,18 @@
+# Dependencies
+node_modules/
+frontend/node_modules/
+
+# Build artifacts
+.DS_Store
+*.log
+
+# API config (contains secrets)
+api/config.php
+
+# IDE
+.vscode/
+.idea/
+
+# Environment
+.env
+.env.local
