@@ -87,6 +87,18 @@ function Timeline({ crew, bookings, dateRange, loading, viewMode = 'crew' }) {
     return `rgb(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)})`;
   };
 
+  // Helper to create striped background for non-confirmed bookings
+  const getStripedBackground = (baseColor) => {
+    const lighterColor = lightenColor(baseColor, 30);
+    return `repeating-linear-gradient(
+      45deg,
+      ${baseColor},
+      ${baseColor} 8px,
+      ${lighterColor} 8px,
+      ${lighterColor} 16px
+    )`;
+  };
+
   // Calculate position and width for a booking bar
   const getBookingStyle = (booking, color) => {
     const bookingStart = startOfDay(parseISO(booking.start));
@@ -103,6 +115,7 @@ function Timeline({ crew, bookings, dateRange, loading, viewMode = 'crew' }) {
     const width = (duration / totalDays) * 100;
 
     const isAppointment = booking.type === 'appointment';
+    const isConfirmed = booking.projectStatus === 'confirmed' || booking.type === 'appointment';
 
     // Use booking's own color if available, otherwise fall back to crew color
     let baseColor;
@@ -113,10 +126,21 @@ function Timeline({ crew, bookings, dateRange, loading, viewMode = 'crew' }) {
       baseColor = color || booking.projectColor || '#3b82f6';
     }
 
+    const finalColor = isAppointment ? lightenColor(baseColor, 20) : baseColor;
+
+    // Use striped background for non-confirmed projects
+    if (!isConfirmed) {
+      return {
+        left: `${Math.max(0, left)}%`,
+        width: `${Math.min(100 - left, width)}%`,
+        background: getStripedBackground(finalColor)
+      };
+    }
+
     return {
       left: `${Math.max(0, left)}%`,
       width: `${Math.min(100 - left, width)}%`,
-      backgroundColor: isAppointment ? lightenColor(baseColor, 20) : baseColor
+      backgroundColor: finalColor
     };
   };
 

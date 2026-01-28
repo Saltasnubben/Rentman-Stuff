@@ -186,6 +186,7 @@ function handleGetCrewBookings(RentmanClient $rentman, ApiResponse $response, st
         $projectName = null;
         $projectId = null;
         $projectColor = null;
+        $projectStatus = null;
 
         if ($functionRef) {
             preg_match('/\/projectfunctions\/(\d+)/', $functionRef, $matches);
@@ -195,7 +196,7 @@ function handleGetCrewBookings(RentmanClient $rentman, ApiResponse $response, st
                     $func = $funcData['data'] ?? $funcData;
                     $roleName = $func['name'] ?? $roleName;
 
-                    // Hämta projekt från funktionen för att få projektnamn och färg
+                    // Hämta projekt från funktionen för att få projektnamn, färg och status
                     $projectRef = $func['project'] ?? null;
                     if ($projectRef) {
                         preg_match('/\/projects\/(\d+)/', $projectRef, $projMatches);
@@ -207,6 +208,7 @@ function handleGetCrewBookings(RentmanClient $rentman, ApiResponse $response, st
                                 $project = $projectData['data'] ?? $projectData;
                                 $projectName = $project['displayname'] ?? $project['name'] ?? null;
                                 $projectColor = $project['color'] ?? null;
+                                $projectStatus = $project['planningstate'] ?? $project['status'] ?? null;
                             } catch (Exception $e) {
                                 // Ignorera fel
                             }
@@ -223,6 +225,7 @@ function handleGetCrewBookings(RentmanClient $rentman, ApiResponse $response, st
             'type' => 'project',
             'projectId' => $projectId ? (int)$projectId : null,
             'projectName' => $projectName ?? $roleName,
+            'projectStatus' => $projectStatus,
             'start' => $assignmentStart,
             'end' => $assignmentEnd,
             'role' => $roleName,
