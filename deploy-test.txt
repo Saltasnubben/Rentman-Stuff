@@ -1,0 +1,6 @@
+FTP Deploy Test
+===============
+This file was uploaded via GitHub Actions FTP deployment.
+Timestamp: 2026-01-28
+
+If you see this file on your server, the deployment works!
