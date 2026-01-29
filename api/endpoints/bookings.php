@@ -68,6 +68,7 @@ function handleBookingsEndpoint(RentmanClient $rentman, ApiResponse $response): 
 
 /**
  * Hämtar projektbokningar för en specifik crewmedlem
+ * Optimerad version - använder endast data från projectcrew utan extra API-anrop
  */
 function fetchProjectBookingsForCrew(RentmanClient $rentman, int $crewId, string $startDate, string $endDate, array &$projectCache): array
 {
@@ -92,19 +93,26 @@ function fetchProjectBookingsForCrew(RentmanClient $rentman, int $crewId, string
             if ($assignmentEndDate < $startDate) continue;
             if ($assignmentStartDate > $endDate) continue;
 
-            // Hämta projektinfo (med cache)
-            $projectInfo = getProjectInfo($rentman, $assignment, $projectCache);
+            // Extrahera projekt-ID från function-referensen för caching
+            $functionRef = $assignment['function'] ?? null;
+            $projectId = null;
+            if ($functionRef && preg_match('/\/projectfunctions\/(\d+)/', $functionRef, $matches)) {
+                $projectId = $matches[1];
+            }
+
+            // Använd displayname direkt - undvik extra API-anrop
+            $projectName = $assignment['displayname'] ?? 'Unnamed';
 
             $bookings[] = [
                 'id' => $assignment['id'],
                 'type' => 'project',
-                'projectId' => $projectInfo['id'],
-                'projectName' => $projectInfo['name'],
-                'projectColor' => $projectInfo['color'],
-                'color' => $projectInfo['color'],
-                'projectStatus' => $projectInfo['status'],
+                'projectId' => $projectId ? (int)$projectId : null,
+                'projectName' => $projectName,
+                'projectColor' => null, // Skippa för snabbhet
+                'color' => null,
+                'projectStatus' => null, // Skippa för snabbhet
                 'crewId' => $crewId,
-                'role' => $assignment['displayname'] ?? $projectInfo['functionName'] ?? 'Crew',
+                'role' => $projectName,
                 'start' => $assignmentStart,
                 'end' => $assignmentEnd,
                 'remark' => $assignment['remark'] ?? null,
