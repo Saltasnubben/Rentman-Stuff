@@ -49,13 +49,15 @@ function handleBookingsEndpoint(RentmanClient $rentman, ApiResponse $response): 
         foreach ($allProjects as $project) {
             $projectId = $project['id'] ?? null;
             if ($projectId) {
-                $projectMap[$projectId] = [
+                // Använd int för konsekvent lookup
+                $projectMap[(int)$projectId] = [
                     'name' => $project['displayname'] ?? $project['name'] ?? 'Unnamed',
                     'color' => $project['color'] ?? null,
                     'status' => $project['planningstate'] ?? $project['status'] ?? null,
                 ];
             }
         }
+        error_log("Loaded " . count($projectMap) . " projects into map");
     } catch (Exception $e) {
         error_log("Failed to fetch projects: " . $e->getMessage());
     }
@@ -71,12 +73,14 @@ function handleBookingsEndpoint(RentmanClient $rentman, ApiResponse $response): 
                 $projectId = (int)$matches[1];
             }
             if ($funcId) {
-                $functionMap[$funcId] = [
+                // Använd int för konsekvent lookup
+                $functionMap[(int)$funcId] = [
                     'name' => $func['name'] ?? null,
                     'projectId' => $projectId,
                 ];
             }
         }
+        error_log("Loaded " . count($functionMap) . " functions into map");
     } catch (Exception $e) {
         error_log("Failed to fetch project functions: " . $e->getMessage());
     }
