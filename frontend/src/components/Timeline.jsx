@@ -24,18 +24,64 @@ function Timeline({ crew, bookings, dateRange, loading, viewMode = 'crew' }) {
 
   const totalDays = days.length;
 
-  // Group bookings by crew member
+  // Check if two bookings overlap (same day)
+  const bookingsOverlap = (a, b) => {
+    const aStart = startOfDay(parseISO(a.start));
+    const aEnd = startOfDay(parseISO(a.end));
+    const bStart = startOfDay(parseISO(b.start));
+    const bEnd = startOfDay(parseISO(b.end));
+
+    // Overlap if one starts before the other ends and vice versa
+    return aStart <= bEnd && bStart <= aEnd;
+  };
+
+  // Assign bookings to rows, packing them so non-overlapping bookings share rows
+  const assignBookingsToRows = (bookingsList) => {
+    const rows = []; // Each row is an array of bookings
+
+    bookingsList.forEach(booking => {
+      // Find a row where this booking doesn't overlap with any existing booking
+      let placed = false;
+      for (let rowIndex = 0; rowIndex < rows.length; rowIndex++) {
+        const row = rows[rowIndex];
+        const hasOverlap = row.some(existing => bookingsOverlap(existing, booking));
+        if (!hasOverlap) {
+          row.push(booking);
+          placed = true;
+          break;
+        }
+      }
+
+      // If no suitable row found, create a new one
+      if (!placed) {
+        rows.push([booking]);
+      }
+    });
+
+    // Return bookings with their assigned row index
+    const result = [];
+    rows.forEach((row, rowIndex) => {
+      row.forEach(booking => {
+        result.push({ ...booking, rowIndex });
+      });
+    });
+
+    return { bookings: result, rowCount: rows.length };
+  };
+
+  // Group bookings by crew member with row assignments
   const bookingsByCrew = useMemo(() => {
     const grouped = {};
 
     crew.forEach(member => {
-      grouped[member.id] = bookings.filter(b => b.crewId === member.id);
+      const memberBookings = bookings.filter(b => b.crewId === member.id);
+      grouped[member.id] = assignBookingsToRows(memberBookings);
     });
 
     return grouped;
   }, [crew, bookings]);
 
-  // Group bookings by project (for project view)
+  // Group bookings by project (for project view) with row assignments
   const bookingsByProject = useMemo(() => {
     const grouped = {};
 
@@ -51,10 +97,15 @@ function Timeline({ crew, bookings, dateRange, loading, viewMode = 'crew' }) {
       grouped[projectKey].bookings.push(booking);
     });
 
-    // Sort projects by name
-    return Object.values(grouped).sort((a, b) =>
-      (a.projectName || '').localeCompare(b.projectName || '', 'sv')
-    );
+    // Assign rows and sort projects by name
+    return Object.values(grouped)
+      .map(project => ({
+        ...project,
+        ...assignBookingsToRows(project.bookings)
+      }))
+      .sort((a, b) =>
+        (a.projectName || '').localeCompare(b.projectName || '', 'sv')
+      );
   }, [bookings]);
 
   // Get crew member name by ID
@@ -205,8 +256,8 @@ function Timeline({ crew, bookings, dateRange, loading, viewMode = 'crew' }) {
       {/* Timeline rows */}
       <div className="divide-y divide-gray-100 dark:divide-gray-700">
         {crew.map(member => {
-          const memberBookings = bookingsByCrew[member.id] || [];
-          const rowHeight = Math.max(80, memberBookings.length * 52 + 16);
+          const { bookings: memberBookings, rowCount } = bookingsByCrew[member.id] || { bookings: [], rowCount: 0 };
+          const rowHeight = Math.max(80, rowCount * 52 + 16);
 
           return (
             <div key={member.id} className="flex" style={{ minHeight: `${rowHeight}px` }}>
@@ -242,7 +293,7 @@ function Timeline({ crew, bookings, dateRange, loading, viewMode = 'crew' }) {
                   </div>
                 ) : (
                   <div className="relative h-full">
-                    {memberBookings.map((booking, index) => {
+                    {memberBookings.map((booking) => {
                       const isAppointment = booking.type === 'appointment';
                       return (
                         <div
@@ -252,7 +303,7 @@ function Timeline({ crew, bookings, dateRange, loading, viewMode = 'crew' }) {
                           }`}
                           style={{
                             ...getBookingStyle(booking),
-                            top: `${index * 52 + 4}px`,
+                            top: `${booking.rowIndex * 52 + 4}px`,
                             height: '48px'
                           }}
                           title={`${booking.projectName}\n${booking.role}\n${format(parseISO(booking.start), 'HH:mm')} - ${format(parseISO(booking.end), 'HH:mm')}`}
@@ -342,7 +393,7 @@ function Timeline({ crew, bookings, dateRange, loading, viewMode = 'crew' }) {
       <div className="divide-y divide-gray-100 dark:divide-gray-700">
         {bookingsByProject.map(project => {
           const projectBookings = project.bookings;
-          const rowHeight = Math.max(80, projectBookings.length * 52 + 16);
+          const rowHeight = Math.max(80, project.rowCount * 52 + 16);
 
           return (
             <div key={project.projectId || project.projectName} className="flex" style={{ minHeight: `${rowHeight}px` }}>
@@ -372,7 +423,7 @@ function Timeline({ crew, bookings, dateRange, loading, viewMode = 'crew' }) {
 
                 {/* Booking bars - showing crew members */}
                 <div className="relative h-full">
-                  {projectBookings.map((booking, index) => {
+                  {projectBookings.map((booking) => {
                     const crewColor = getCrewColor(booking.crewId);
                     const isAppointment = booking.type === 'appointment';
                     return (
@@ -383,7 +434,7 @@ function Timeline({ crew, bookings, dateRange, loading, viewMode = 'crew' }) {
                         }`}
                         style={{
                           ...getBookingStyle(booking, crewColor),
-                          top: `${index * 52 + 4}px`,
+                          top: `${booking.rowIndex * 52 + 4}px`,
                           height: '48px'
                         }}
                         title={`${getCrewName(booking.crewId)}\n${booking.role}\n${format(parseISO(booking.start), 'HH:mm')} - ${format(parseISO(booking.end), 'HH:mm')}`}
