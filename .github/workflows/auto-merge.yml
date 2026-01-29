@@ -30,6 +30,35 @@ jobs:
           git merge --no-ff ${{ github.ref_name }} -m "Auto-merge ${{ github.ref_name }}"
           git push origin main
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --prefix frontend
+
+      - name: Build frontend
+        run: npm run build --prefix frontend
+
+      - name: Copy API files to public
+        run: |
+          cp -r api public/
+          cp public/.htaccess public/.htaccess.bak 2>/dev/null || true
+
+      - name: Create .htaccess
+        run: |
+          cat > public/.htaccess << 'EOF'
+          RewriteEngine On
+          RewriteCond %{REQUEST_URI} ^/api
+          RewriteRule ^api/(.*)$ api/index.php [L,QSA]
+          RewriteCond %{REQUEST_FILENAME} !-f
+          RewriteCond %{REQUEST_FILENAME} !-d
+          RewriteRule . index.html [L]
+          EOF
+
       - name: Deploy to FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
