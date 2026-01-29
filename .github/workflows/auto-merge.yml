@@ -39,6 +39,7 @@ jobs:
           port: ${{ secrets.FTP_PORT }}
           local-dir: ./public/
           server-dir: ./
+          dangerous-clean-slate: true
           exclude: |
             **/.git*
             **/.git*/**
