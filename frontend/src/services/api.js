@@ -43,32 +43,30 @@ export async function fetchCrewBookings(crewId, startDate, endDate, includeAppoi
 
 /**
  * Fetch bookings for multiple crew members within a date range
- * Fetches each crew member's bookings in parallel
+ * Fetches sequentially with delay to avoid rate limiting
  */
 export async function fetchBookings({ crewIds, startDate, endDate, includeAppointments = true }) {
   if (!crewIds || crewIds.length === 0) {
     return { data: [], count: 0 };
   }
 
-  // Fetch bookings for each crew member in parallel
-  const promises = crewIds.map(crewId =>
-    fetchCrewBookings(crewId, startDate, endDate, includeAppointments)
-      .then(result => ({
-        crewId,
-        bookings: result.data || []
-      }))
-      .catch(err => {
-        console.warn(`Failed to fetch bookings for crew ${crewId}:`, err);
-        return { crewId, bookings: [] };
-      })
-  );
+  const allBookings = [];
 
-  const results = await Promise.all(promises);
+  // Fetch bookings sequentially with small delay to avoid rate limiting
+  for (const crewId of crewIds) {
+    try {
+      const result = await fetchCrewBookings(crewId, startDate, endDate, includeAppointments);
+      const bookings = (result.data || []).map(booking => ({ ...booking, crewId }));
+      allBookings.push(...bookings);
+    } catch (err) {
+      console.warn(`Failed to fetch bookings for crew ${crewId}:`, err);
+    }
 
-  // Combine all bookings and add crewId to each
-  const allBookings = results.flatMap(({ crewId, bookings }) =>
-    bookings.map(booking => ({ ...booking, crewId }))
-  );
+    // Small delay between requests to avoid rate limiting
+    if (crewIds.indexOf(crewId) < crewIds.length - 1) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+  }
 
   return {
     data: allBookings,
