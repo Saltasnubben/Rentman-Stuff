@@ -43,34 +43,31 @@ export async function fetchCrewBookings(crewId, startDate, endDate, includeAppoi
 
 /**
  * Fetch bookings for multiple crew members within a date range
- * Fetches sequentially with delay to avoid rate limiting
+ * Uses the efficient /api/bookings endpoint that fetches all in one call
  */
 export async function fetchBookings({ crewIds, startDate, endDate, includeAppointments = true }) {
   if (!crewIds || crewIds.length === 0) {
     return { data: [], count: 0 };
   }
 
-  const allBookings = [];
+  const params = {
+    crewIds: crewIds.join(','),
+    startDate: format(startDate, 'yyyy-MM-dd'),
+    endDate: format(endDate, 'yyyy-MM-dd'),
+    includeAppointments: includeAppointments ? 'true' : 'false'
+  };
 
-  // Fetch bookings sequentially with small delay to avoid rate limiting
-  for (const crewId of crewIds) {
-    try {
-      const result = await fetchCrewBookings(crewId, startDate, endDate, includeAppointments);
-      const bookings = (result.data || []).map(booking => ({ ...booking, crewId }));
-      allBookings.push(...bookings);
-    } catch (err) {
-      console.warn(`Failed to fetch bookings for crew ${crewId}:`, err);
-    }
+  const response = await api.get('/bookings', { params });
 
-    // Small delay between requests to avoid rate limiting
-    if (crewIds.indexOf(crewId) < crewIds.length - 1) {
-      await new Promise(resolve => setTimeout(resolve, 100));
-    }
-  }
+  // Add crewId to each booking if not present
+  const bookings = (response.data.data || []).map(booking => ({
+    ...booking,
+    type: booking.type || 'project'
+  }));
 
   return {
-    data: allBookings,
-    count: allBookings.length
+    data: bookings,
+    count: bookings.length
   };
 }
 

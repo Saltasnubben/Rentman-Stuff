@@ -15,6 +15,7 @@ function handleBookingsEndpoint(RentmanClient $rentman, ApiResponse $response): 
     $startDate = $_GET['startDate'] ?? null;
     $endDate = $_GET['endDate'] ?? null;
     $crewIdsParam = $_GET['crewIds'] ?? '';
+    $includeAppointments = ($_GET['includeAppointments'] ?? 'true') !== 'false';
 
     // Validera required params
     if (empty($startDate) || empty($endDate)) {
@@ -105,10 +106,12 @@ function handleBookingsEndpoint(RentmanClient $rentman, ApiResponse $response): 
 
             $booking = [
                 'id' => $projectId . '-' . $assignment['id'],
+                'type' => 'project',
                 'projectId' => $projectId,
                 'projectName' => $project['displayname'] ?? $project['name'] ?? 'Unnamed',
                 'projectColor' => $project['color'] ?? '#3B82F6',
-                'projectStatus' => $project['status'] ?? null,
+                'color' => $project['color'] ?? null,
+                'projectStatus' => $project['planningstate'] ?? $project['status'] ?? null,
                 'crewId' => $crewId,
                 'crewAssignmentId' => $assignment['id'],
                 'role' => $assignment['function_name'] ?? $projectFunction['name'] ?? 'Crew',
@@ -116,10 +119,18 @@ function handleBookingsEndpoint(RentmanClient $rentman, ApiResponse $response): 
                 'end' => $projectFunction['planperiod_end'] ?? $project['planperiod_end'] ?? null,
                 'location' => $project['location'] ?? null,
                 'customer' => $project['account_name'] ?? null,
-                'notes' => $assignment['remark'] ?? null,
+                'remark' => $assignment['remark'] ?? null,
             ];
 
             $bookings[] = $booking;
+        }
+    }
+
+    // Hämta appointments för varje vald crewmedlem om aktiverat
+    if ($includeAppointments && !empty($selectedCrewIds)) {
+        foreach ($selectedCrewIds as $crewId) {
+            $appointments = fetchCrewAppointmentsForBookings($rentman, $crewId, $startDate, $endDate);
+            $bookings = array_merge($bookings, $appointments);
         }
     }
 
@@ -134,6 +145,49 @@ function handleBookingsEndpoint(RentmanClient $rentman, ApiResponse $response): 
         'period' => ['startDate' => $startDate, 'endDate' => $endDate],
         'projectCount' => count($projects),
     ]);
+}
+
+/**
+ * Hämtar kalenderbokningar (appointments) för en crewmedlem
+ */
+function fetchCrewAppointmentsForBookings(RentmanClient $rentman, int $crewId, string $startDate, string $endDate): array
+{
+    $appointments = [];
+
+    try {
+        $rawAppointments = $rentman->fetchAllPages("/crew/$crewId/appointments", [], 25);
+
+        foreach ($rawAppointments as $apt) {
+            $aptStart = $apt['start'] ?? null;
+            $aptEnd = $apt['end'] ?? null;
+
+            if (!$aptStart || !$aptEnd) continue;
+
+            $aptStartDate = substr($aptStart, 0, 10);
+            $aptEndDate = substr($aptEnd, 0, 10);
+
+            if ($aptEndDate < $startDate) continue;
+            if ($aptStartDate > $endDate) continue;
+
+            $appointments[] = [
+                'id' => 'apt_' . $apt['id'],
+                'type' => 'appointment',
+                'projectId' => null,
+                'projectName' => $apt['displayname'] ?? $apt['name'] ?? 'Kalenderbokning',
+                'start' => $aptStart,
+                'end' => $aptEnd,
+                'role' => $apt['displayname'] ?? $apt['name'] ?? 'Möte',
+                'remark' => $apt['remark'] ?? null,
+                'location' => $apt['location'] ?? null,
+                'color' => $apt['color'] ?? null,
+                'crewId' => $crewId,
+            ];
+        }
+    } catch (Exception $e) {
+        error_log("Failed to fetch appointments for crew $crewId: " . $e->getMessage());
+    }
+
+    return $appointments;
 }
 
 /**
