@@ -109,7 +109,7 @@ function App() {
                 </svg>
               </div>
               <div>
-                <h1 className="text-xl font-bold text-gray-900 dark:text-white">Rentman Booking Visualizer</h1>
+                <h1 className="text-xl font-bold text-gray-900 dark:text-white">Rentman Booking Visualizer.</h1>
                 <p className="text-sm text-gray-500 dark:text-gray-400">Din livboj i personal-djungeln.</p>
               </div>
             </div>
