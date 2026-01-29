@@ -49,15 +49,13 @@ function handleBookingsEndpoint(RentmanClient $rentman, ApiResponse $response): 
         foreach ($allProjects as $project) {
             $projectId = $project['id'] ?? null;
             if ($projectId) {
-                // Använd int för konsekvent lookup
-                $projectMap[(int)$projectId] = [
+                $projectMap[(string)$projectId] = [
                     'name' => $project['displayname'] ?? $project['name'] ?? 'Unnamed',
                     'color' => $project['color'] ?? null,
                     'status' => $project['planningstate'] ?? $project['status'] ?? null,
                 ];
             }
         }
-        error_log("Loaded " . count($projectMap) . " projects into map");
     } catch (Exception $e) {
         error_log("Failed to fetch projects: " . $e->getMessage());
     }
@@ -70,17 +68,15 @@ function handleBookingsEndpoint(RentmanClient $rentman, ApiResponse $response): 
             $projectRef = $func['project'] ?? null;
             $projectId = null;
             if ($projectRef && preg_match('/\/projects\/(\d+)/', $projectRef, $matches)) {
-                $projectId = (int)$matches[1];
+                $projectId = $matches[1]; // Behåll som sträng
             }
             if ($funcId) {
-                // Använd int för konsekvent lookup
-                $functionMap[(int)$funcId] = [
+                $functionMap[(string)$funcId] = [
                     'name' => $func['name'] ?? null,
                     'projectId' => $projectId,
                 ];
             }
         }
-        error_log("Loaded " . count($functionMap) . " functions into map");
     } catch (Exception $e) {
         error_log("Failed to fetch project functions: " . $e->getMessage());
     }
@@ -115,7 +111,7 @@ function handleBookingsEndpoint(RentmanClient $rentman, ApiResponse $response): 
                 $projectStatus = null;
 
                 if ($functionRef && preg_match('/\/projectfunctions\/(\d+)/', $functionRef, $matches)) {
-                    $functionId = (int)$matches[1];
+                    $functionId = $matches[1]; // Sträng för konsekvent lookup
 
                     // Slå upp funktion
                     if (isset($functionMap[$functionId])) {
