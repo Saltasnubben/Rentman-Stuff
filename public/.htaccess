@@ -1,0 +1,10 @@
+RewriteEngine On
+
+# Handle API requests
+RewriteCond %{REQUEST_URI} ^/api
+RewriteRule ^api/(.*)$ api/index.php [L,QSA]
+
+# Handle React SPA - serve index.html for all non-file requests
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule . index.html [L]
