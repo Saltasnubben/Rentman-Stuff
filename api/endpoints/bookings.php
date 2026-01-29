@@ -1,6 +1,6 @@
 <?php
 /**
- * Bookings Endpoint - Optimized with proper project names
+ * Bookings Endpoint - Optimized with bulk pre-fetching
  *
  * GET /api/bookings - Hämta bokningar för valda crewmedlemmar under en period
  *
@@ -39,14 +39,55 @@ function handleBookingsEndpoint(RentmanClient $rentman, ApiResponse $response): 
         return;
     }
 
-    // STEG 1: Samla alla assignments för alla crew-medlemmar
-    $allAssignments = [];
-    $functionIds = []; // Unika function IDs att slå upp
+    // STEG 1: Förhämta ALLA projekt och funktioner (bulk fetch - mycket snabbare)
+    $projectMap = [];    // project_id => {name, color, status}
+    $functionMap = [];   // function_id => {name, project_id}
+
+    try {
+        // Hämta alla projekt (med cache via RentmanClient)
+        $allProjects = $rentman->fetchAllPages("/projects", [], 100);
+        foreach ($allProjects as $project) {
+            $projectId = $project['id'] ?? null;
+            if ($projectId) {
+                $projectMap[$projectId] = [
+                    'name' => $project['displayname'] ?? $project['name'] ?? 'Unnamed',
+                    'color' => $project['color'] ?? null,
+                    'status' => $project['planningstate'] ?? $project['status'] ?? null,
+                ];
+            }
+        }
+    } catch (Exception $e) {
+        error_log("Failed to fetch projects: " . $e->getMessage());
+    }
+
+    try {
+        // Hämta alla projektfunktioner
+        $allFunctions = $rentman->fetchAllPages("/projectfunctions", [], 100);
+        foreach ($allFunctions as $func) {
+            $funcId = $func['id'] ?? null;
+            $projectRef = $func['project'] ?? null;
+            $projectId = null;
+            if ($projectRef && preg_match('/\/projects\/(\d+)/', $projectRef, $matches)) {
+                $projectId = (int)$matches[1];
+            }
+            if ($funcId) {
+                $functionMap[$funcId] = [
+                    'name' => $func['name'] ?? null,
+                    'projectId' => $projectId,
+                ];
+            }
+        }
+    } catch (Exception $e) {
+        error_log("Failed to fetch project functions: " . $e->getMessage());
+    }
+
+    // STEG 2: Hämta assignments för varje crewmedlem
+    $allBookings = [];
 
     foreach ($selectedCrewIds as $crewId) {
         try {
             $params = ['crewmember' => "/crew/$crewId"];
-            $assignments = $rentman->fetchAllPages("/projectcrew", $params, 25);
+            $assignments = $rentman->fetchAllPages("/projectcrew", $params, 100);
 
             foreach ($assignments as $assignment) {
                 $assignmentStart = $assignment['planperiod_start'] ?? null;
@@ -60,59 +101,52 @@ function handleBookingsEndpoint(RentmanClient $rentman, ApiResponse $response): 
                 if ($assignmentEndDate < $startDate) continue;
                 if ($assignmentStartDate > $endDate) continue;
 
-                // Extrahera function ID
+                // Extrahera function ID och slå upp i våra maps
                 $functionRef = $assignment['function'] ?? null;
                 $functionId = null;
+                $projectId = null;
+                $projectName = $assignment['displayname'] ?? 'Unnamed';
+                $functionName = $projectName;
+                $projectColor = null;
+                $projectStatus = null;
+
                 if ($functionRef && preg_match('/\/projectfunctions\/(\d+)/', $functionRef, $matches)) {
-                    $functionId = $matches[1];
-                    $functionIds[$functionId] = true;
+                    $functionId = (int)$matches[1];
+
+                    // Slå upp funktion
+                    if (isset($functionMap[$functionId])) {
+                        $funcInfo = $functionMap[$functionId];
+                        $functionName = $funcInfo['name'] ?? $functionName;
+                        $projectId = $funcInfo['projectId'];
+
+                        // Slå upp projekt
+                        if ($projectId && isset($projectMap[$projectId])) {
+                            $projInfo = $projectMap[$projectId];
+                            $projectName = $projInfo['name'];
+                            $projectColor = $projInfo['color'];
+                            $projectStatus = $projInfo['status'];
+                        }
+                    }
                 }
 
-                $allAssignments[] = [
-                    'assignment' => $assignment,
+                $allBookings[] = [
+                    'id' => $assignment['id'],
+                    'type' => 'project',
+                    'projectId' => $projectId,
+                    'projectName' => $projectName,
+                    'projectColor' => $projectColor,
+                    'color' => $projectColor,
+                    'projectStatus' => $projectStatus,
                     'crewId' => $crewId,
-                    'functionId' => $functionId,
+                    'role' => $functionName,
+                    'start' => $assignmentStart,
+                    'end' => $assignmentEnd,
+                    'remark' => $assignment['remark'] ?? null,
                 ];
             }
         } catch (Exception $e) {
             error_log("Failed to fetch assignments for crew $crewId: " . $e->getMessage());
         }
-    }
-
-    // STEG 2: Hämta projektinfo för alla unika functions (med caching via RentmanClient)
-    $projectInfoCache = [];
-    foreach (array_keys($functionIds) as $functionId) {
-        try {
-            $projectInfo = fetchProjectInfoByFunction($rentman, $functionId);
-            $projectInfoCache[$functionId] = $projectInfo;
-        } catch (Exception $e) {
-            error_log("Failed to fetch project info for function $functionId: " . $e->getMessage());
-        }
-    }
-
-    // STEG 3: Bygg bookings med riktig projektinfo
-    $allBookings = [];
-    foreach ($allAssignments as $item) {
-        $assignment = $item['assignment'];
-        $crewId = $item['crewId'];
-        $functionId = $item['functionId'];
-
-        $projectInfo = $projectInfoCache[$functionId] ?? null;
-
-        $allBookings[] = [
-            'id' => $assignment['id'],
-            'type' => 'project',
-            'projectId' => $projectInfo['projectId'] ?? null,
-            'projectName' => $projectInfo['projectName'] ?? ($assignment['displayname'] ?? 'Unnamed'),
-            'projectColor' => $projectInfo['color'] ?? null,
-            'color' => $projectInfo['color'] ?? null,
-            'projectStatus' => $projectInfo['status'] ?? null,
-            'crewId' => $crewId,
-            'role' => $projectInfo['functionName'] ?? ($assignment['displayname'] ?? 'Unnamed'),
-            'start' => $assignment['planperiod_start'],
-            'end' => $assignment['planperiod_end'],
-            'remark' => $assignment['remark'] ?? null,
-        ];
     }
 
     // Hämta appointments om aktiverat
@@ -134,119 +168,6 @@ function handleBookingsEndpoint(RentmanClient $rentman, ApiResponse $response): 
 }
 
 /**
- * Hämtar projektinfo via projectfunction ID
- * Returnerar projektnamn, färg och status
- */
-function fetchProjectInfoByFunction(RentmanClient $rentman, string $functionId): array
-{
-    // Hämta projectfunction
-    $funcData = $rentman->get("/projectfunctions/$functionId");
-    $func = $funcData['data'] ?? $funcData;
-
-    $functionName = $func['name'] ?? null;
-    $projectRef = $func['project'] ?? null;
-
-    if (!$projectRef || !preg_match('/\/projects\/(\d+)/', $projectRef, $matches)) {
-        return [
-            'projectId' => null,
-            'projectName' => $functionName ?? 'Unknown',
-            'functionName' => $functionName,
-            'color' => null,
-            'status' => null,
-        ];
-    }
-
-    $projectId = $matches[1];
-
-    // Hämta projekt
-    $projectData = $rentman->get("/projects/$projectId");
-    $project = $projectData['data'] ?? $projectData;
-
-    return [
-        'projectId' => (int)$projectId,
-        'projectName' => $project['displayname'] ?? $project['name'] ?? 'Unnamed',
-        'functionName' => $functionName,
-        'color' => $project['color'] ?? null,
-        'status' => $project['planningstate'] ?? $project['status'] ?? null,
-    ];
-}
-
-/**
- * Hämtar projektinfo från assignment med caching
- */
-function getProjectInfo(RentmanClient $rentman, array $assignment, array &$projectCache): array
-{
-    $defaultInfo = [
-        'id' => null,
-        'name' => $assignment['displayname'] ?? 'Unnamed',
-        'color' => '#3B82F6',
-        'status' => null,
-        'functionName' => null,
-    ];
-
-    // Försök hämta projekt via function-referensen
-    $functionRef = $assignment['function'] ?? null;
-    if (!$functionRef) {
-        return $defaultInfo;
-    }
-
-    // Extrahera function ID
-    if (!preg_match('/\/projectfunctions\/(\d+)/', $functionRef, $matches)) {
-        return $defaultInfo;
-    }
-    $functionId = $matches[1];
-
-    // Kolla cache först
-    if (isset($projectCache[$functionId])) {
-        return $projectCache[$functionId];
-    }
-
-    try {
-        // Hämta projektfunktion
-        $funcData = $rentman->get("/projectfunctions/$functionId");
-        $func = $funcData['data'] ?? $funcData;
-        $defaultInfo['functionName'] = $func['name'] ?? null;
-
-        // Hämta projekt
-        $projectRef = $func['project'] ?? null;
-        if ($projectRef && preg_match('/\/projects\/(\d+)/', $projectRef, $projMatches)) {
-            $projectId = $projMatches[1];
-
-            // Kolla om projektet finns i cache
-            $cacheKey = "project_$projectId";
-            if (isset($projectCache[$cacheKey])) {
-                $projectInfo = $projectCache[$cacheKey];
-                $projectInfo['functionName'] = $defaultInfo['functionName'];
-                $projectCache[$functionId] = $projectInfo;
-                return $projectInfo;
-            }
-
-            $projectData = $rentman->get("/projects/$projectId");
-            $project = $projectData['data'] ?? $projectData;
-
-            $projectInfo = [
-                'id' => (int)$projectId,
-                'name' => $project['displayname'] ?? $project['name'] ?? $defaultInfo['name'],
-                'color' => $project['color'] ?? $defaultInfo['color'],
-                'status' => $project['planningstate'] ?? $project['status'] ?? null,
-                'functionName' => $defaultInfo['functionName'],
-            ];
-
-            // Spara i cache
-            $projectCache[$functionId] = $projectInfo;
-            $projectCache[$cacheKey] = $projectInfo;
-
-            return $projectInfo;
-        }
-    } catch (Exception $e) {
-        error_log("Failed to get project info for function $functionId: " . $e->getMessage());
-    }
-
-    $projectCache[$functionId] = $defaultInfo;
-    return $defaultInfo;
-}
-
-/**
  * Hämtar kalenderbokningar för en crewmedlem
  */
 function fetchAppointmentsForCrew(RentmanClient $rentman, int $crewId, string $startDate, string $endDate): array
@@ -254,7 +175,7 @@ function fetchAppointmentsForCrew(RentmanClient $rentman, int $crewId, string $s
     $appointments = [];
 
     try {
-        $rawAppointments = $rentman->fetchAllPages("/crew/$crewId/appointments", [], 25);
+        $rawAppointments = $rentman->fetchAllPages("/crew/$crewId/appointments", [], 100);
 
         foreach ($rawAppointments as $apt) {
             $aptStart = $apt['start'] ?? null;
