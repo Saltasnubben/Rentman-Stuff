@@ -22,3 +22,4 @@ if ($uri !== '/' && file_exists($filePath) && is_file($filePath)) {
 
 // Annars, skicka allt till index.php
 require __DIR__ . '/index.php';
+
