@@ -91,7 +91,9 @@ function handleBookingsEndpoint(RentmanClient $rentman, ApiResponse $response): 
 
         // Bearbeta crew-tilldelningar
         foreach ($crewAssignments as $assignment) {
-            $crewId = extractCrewId($assignment['crew'] ?? null);
+            // Try multiple field names for crew reference
+            $crewRef = $assignment['crewmember'] ?? $assignment['crew'] ?? null;
+            $crewId = extractCrewId($crewRef);
 
             // Filtrera på valda crew om specificerat
             if (!empty($selectedCrewIds) && !in_array($crewId, $selectedCrewIds)) {
@@ -203,7 +205,8 @@ function extractCrewId($crewRef): ?int
         return (int) $crewRef;
     }
 
-    if (preg_match('/\/crew\/(\d+)/', $crewRef, $matches)) {
+    // Try both /crew/ and /crewmember/ patterns
+    if (preg_match('/\/crew(?:member)?\/(\d+)/', $crewRef, $matches)) {
         return (int) $matches[1];
     }
 
