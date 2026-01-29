@@ -115,7 +115,14 @@ function Timeline({ crew, bookings, dateRange, loading, viewMode = 'crew' }) {
     const width = (duration / totalDays) * 100;
 
     const isAppointment = booking.type === 'appointment';
-    const isConfirmed = booking.projectStatus === 'confirmed' || booking.type === 'appointment';
+    // Check for confirmed status (case-insensitive) - treat null/undefined as confirmed
+    const status = (booking.projectStatus || '').toLowerCase();
+    const isConfirmed = isAppointment || !status || status === 'confirmed';
+
+    // Debug: log status values (remove after testing)
+    if (booking.projectStatus) {
+      console.log('Project:', booking.projectName, 'Status:', booking.projectStatus);
+    }
 
     // Use booking's own color if available, otherwise fall back to crew color
     let baseColor;
