@@ -35,10 +35,8 @@ function handleUnfilledEndpoint(RentmanClient $rentman, ApiResponse $response): 
 
     // STEG 1: Hämta alla projekt i datumintervallet (begränsa fält för att minska data)
     try {
-        // Begränsa till aktiva projekt och färre fält
-        $allProjects = $rentman->fetchAllPages('/projects', [
-            'fields' => 'id,displayname,name,planperiod_start,planperiod_end,color,planningstate,status'
-        ], 100);
+        // Hämta projekt (utan fields-begränsning för att få status)
+        $allProjects = $rentman->fetchAllPages('/projects', [], 25);
         
         // Filtrera på datum
         $relevantProjects = array_filter($allProjects, function($project) use ($startDate, $endDate, $filterProjectIds) {
