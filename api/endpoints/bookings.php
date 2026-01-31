@@ -13,6 +13,10 @@
 
 function handleBookingsEndpoint(RentmanClient $rentman, ApiResponse $response): void
 {
+    $debug = ($_GET['debug'] ?? '') === '1';
+    $timings = [];
+    $t0 = microtime(true);
+
     $startDate = $_GET['startDate'] ?? null;
     $endDate = $_GET['endDate'] ?? null;
     $crewIdsParam = $_GET['crewIds'] ?? '';
@@ -42,6 +46,7 @@ function handleBookingsEndpoint(RentmanClient $rentman, ApiResponse $response): 
     // STEG 1: Hämta alla assignments för alla crew först
     $allAssignments = [];
     $neededFunctionIds = [];
+    $timings['step1_start'] = microtime(true) - $t0;
 
     foreach ($selectedCrewIds as $crewId) {
         try {
@@ -77,6 +82,10 @@ function handleBookingsEndpoint(RentmanClient $rentman, ApiResponse $response): 
     }
 
     // STEG 2: Hämta bara de funktioner vi behöver (med cache)
+    $timings['step1_done'] = microtime(true) - $t0;
+    $timings['assignments_count'] = count($allAssignments);
+    $timings['functions_needed'] = count($neededFunctionIds);
+
     $functionMap = [];
     $neededProjectIds = [];
 
@@ -102,6 +111,9 @@ function handleBookingsEndpoint(RentmanClient $rentman, ApiResponse $response): 
     }
 
     // STEG 3: Hämta bara de projekt vi behöver (med cache)
+    $timings['step2_done'] = microtime(true) - $t0;
+    $timings['projects_needed'] = count($neededProjectIds);
+
     $projectMap = [];
 
     foreach (array_keys($neededProjectIds) as $projectId) {
@@ -120,6 +132,8 @@ function handleBookingsEndpoint(RentmanClient $rentman, ApiResponse $response): 
     }
 
     // STEG 4: Bygg bookings med projektinfo
+    $timings['step3_done'] = microtime(true) - $t0;
+
     $allBookings = [];
 
     foreach ($allAssignments as $item) {
@@ -127,28 +141,45 @@ function handleBookingsEndpoint(RentmanClient $rentman, ApiResponse $response): 
         $crewId = $item['crewId'];
 
         $functionRef = $assignment['function'] ?? null;
-        $projectName = $assignment['displayname'] ?? 'Unnamed';
-        $functionName = $projectName;
         $projectId = null;
         $projectColor = null;
         $projectStatus = null;
+
+        // Start med null - vi sätter riktiga namn nedan
+        $resolvedProjectName = null;
+        $resolvedFunctionName = null;
 
         if ($functionRef && preg_match('/\/projectfunctions\/(\d+)/', $functionRef, $matches)) {
             $funcId = $matches[1];
 
             if (isset($functionMap[$funcId])) {
                 $funcInfo = $functionMap[$funcId];
-                $functionName = $funcInfo['name'] ?? $functionName;
+                $resolvedFunctionName = $funcInfo['name'] ?? null;
                 $projectId = $funcInfo['projectId'];
 
                 if ($projectId && isset($projectMap[$projectId])) {
                     $projInfo = $projectMap[$projectId];
-                    $projectName = $projInfo['name'];
+                    $resolvedProjectName = $projInfo['name'];
                     $projectColor = $projInfo['color'];
                     $projectStatus = $projInfo['status'];
                 }
             }
         }
+
+        // Fallback-kedja för projektnamn (undvik placeholder-namn)
+        $displayName = $assignment['displayname'] ?? '';
+        $isPlaceholder = empty($displayName)
+            || stripos($displayName, 'Display') !== false
+            || stripos($displayName, 'Planningpersonell') !== false
+            || stripos($displayName, 'Planning personnel') !== false;
+
+        // Prioritet: Riktigt projektnamn > Funktionsnamn > Assignment displayname (om ej placeholder) > Fallback
+        $projectName = $resolvedProjectName
+            ?? $resolvedFunctionName
+            ?? (!$isPlaceholder ? $displayName : null)
+            ?? 'Projekt #' . ($projectId ?? $assignment['id'] ?? 'okänt');
+
+        $functionName = $resolvedFunctionName ?? $projectName;
 
         $allBookings[] = [
             'id' => $assignment['id'],
@@ -177,11 +208,23 @@ function handleBookingsEndpoint(RentmanClient $rentman, ApiResponse $response): 
     // Sortera efter startdatum
     usort($allBookings, fn($a, $b) => strcmp($a['start'] ?? '', $b['start'] ?? ''));
 
-    $response->json([
+    $timings['total'] = microtime(true) - $t0;
+
+    $result = [
         'data' => $allBookings,
         'count' => count($allBookings),
         'period' => ['startDate' => $startDate, 'endDate' => $endDate],
-    ]);
+    ];
+
+    // Lägg till debug-info om ?debug=1
+    if ($debug) {
+        $result['_debug'] = [
+            'timings_seconds' => $timings,
+            'crew_ids' => $selectedCrewIds,
+        ];
+    }
+
+    $response->json($result);
 }
 
 /**
