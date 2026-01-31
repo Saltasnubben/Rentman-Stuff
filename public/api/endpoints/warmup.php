@@ -45,9 +45,12 @@ function handleWarmupEndpoint(RentmanClient $rentman, ApiResponse $response): vo
     try {
         $allCrew = $rentman->fetchAllPages('/crew', [], 100);
         $targetCrew = array_filter($allCrew, function($c) use ($tag) {
-            $tags = $c['tags'] ?? [];
+            $tagsString = $c['tags'] ?? '';
+            if (empty($tagsString)) return false;
+            $tags = array_map('trim', explode(',', $tagsString));
             return in_array($tag, $tags);
         });
+        $targetCrew = array_values($targetCrew); // Re-index array
         $stats['crew_found'] = count($targetCrew);
     } catch (Exception $e) {
         $stats['errors'][] = "Failed to fetch crew: " . $e->getMessage();
