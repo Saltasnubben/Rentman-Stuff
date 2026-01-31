@@ -205,10 +205,17 @@ function handleUnfilledEndpoint(RentmanClient $rentman, ApiResponse $response): 
             $statusValues[$s] = ($statusValues[$s] ?? 0) + 1;
         }
         
+        // Visa alla tillgängliga fält från första projektet
+        $sampleFields = [];
+        if (!empty($relevantProjects)) {
+            $sampleFields = array_keys($relevantProjects[0]);
+        }
+        
         $result['_debug'] = [
             'timings_seconds' => $timings,
             'status_values_found' => $statusValues,
             'projects_checked' => count($relevantProjects),
+            'sample_project_fields' => $sampleFields,
         ];
     }
 
