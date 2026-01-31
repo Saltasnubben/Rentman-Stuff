@@ -103,6 +103,11 @@ try {
             }
             break;
 
+        case 'warmup':
+            require __DIR__ . '/endpoints/warmup.php';
+            handleWarmupEndpoint($rentman, $response);
+            break;
+
         default:
             $response->notFound("Unknown endpoint: $endpoint");
     }
