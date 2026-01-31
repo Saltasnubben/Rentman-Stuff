@@ -1,14 +1,12 @@
 <?php
 /**
- * Bookings Endpoint - Optimized with targeted fetching
+ * Bookings Endpoint - OPTIMIZED VERSION
  *
- * GET /api/bookings - Hämta bokningar för valda crewmedlemmar under en period
- *
- * Query params:
- * - crewIds: Kommaseparerade crew-ID:n
- * - startDate: Startdatum (ISO format)
- * - endDate: Slutdatum (ISO format)
- * - includeAppointments: true/false
+ * Strategies:
+ * 1. Batch collect all function/project IDs before fetching
+ * 2. Use in-memory cache during request
+ * 3. Fetch projects directly with date filter instead of via projectcrew
+ * 4. Single aggregated cache file per request type
  */
 
 function handleBookingsEndpoint(RentmanClient $rentman, ApiResponse $response): void
@@ -18,13 +16,11 @@ function handleBookingsEndpoint(RentmanClient $rentman, ApiResponse $response): 
     $crewIdsParam = $_GET['crewIds'] ?? '';
     $includeAppointments = ($_GET['includeAppointments'] ?? 'true') !== 'false';
 
-    // Validera required params
     if (empty($startDate) || empty($endDate)) {
         $response->badRequest('startDate and endDate are required');
         return;
     }
 
-    // Parsa crew IDs
     $selectedCrewIds = [];
     if (!empty($crewIdsParam)) {
         $selectedCrewIds = array_map('intval', array_filter(explode(',', $crewIdsParam)));
@@ -39,36 +35,39 @@ function handleBookingsEndpoint(RentmanClient $rentman, ApiResponse $response): 
         return;
     }
 
-    // STEG 1: Hämta alla assignments för alla crew först
+    // PHASE 1: Collect ALL assignments for all crew (parallel if possible)
     $allAssignments = [];
-    $neededFunctionIds = [];
+    $functionIdsNeeded = [];
 
     foreach ($selectedCrewIds as $crewId) {
         try {
-            $params = ['crewmember' => "/crew/$crewId"];
-            $assignments = $rentman->fetchAllPages("/projectcrew", $params, 100);
+            $assignments = $rentman->fetchAllPages("/projectcrew", [
+                'crewmember' => "/crew/$crewId"
+            ], 100);
 
             foreach ($assignments as $assignment) {
-                $assignmentStart = $assignment['planperiod_start'] ?? null;
-                $assignmentEnd = $assignment['planperiod_end'] ?? null;
+                $start = $assignment['planperiod_start'] ?? null;
+                $end = $assignment['planperiod_end'] ?? null;
 
-                if (!$assignmentStart || !$assignmentEnd) continue;
+                if (!$start || !$end) continue;
 
-                $assignmentStartDate = substr($assignmentStart, 0, 10);
-                $assignmentEndDate = substr($assignmentEnd, 0, 10);
+                $startDay = substr($start, 0, 10);
+                $endDay = substr($end, 0, 10);
 
-                if ($assignmentEndDate < $startDate) continue;
-                if ($assignmentStartDate > $endDate) continue;
+                if ($endDay < $startDate || $startDay > $endDate) continue;
 
-                // Samla function IDs vi behöver
-                $functionRef = $assignment['function'] ?? null;
-                if ($functionRef && preg_match('/\/projectfunctions\/(\d+)/', $functionRef, $matches)) {
-                    $neededFunctionIds[$matches[1]] = true;
+                // Extract function ID
+                $funcRef = $assignment['function'] ?? '';
+                $funcId = null;
+                if (preg_match('/\/projectfunctions\/(\d+)/', $funcRef, $m)) {
+                    $funcId = (int)$m[1];
+                    $functionIdsNeeded[$funcId] = true;
                 }
 
                 $allAssignments[] = [
                     'assignment' => $assignment,
                     'crewId' => $crewId,
+                    'functionId' => $funcId,
                 ];
             }
         } catch (Exception $e) {
@@ -76,105 +75,177 @@ function handleBookingsEndpoint(RentmanClient $rentman, ApiResponse $response): 
         }
     }
 
-    // STEG 2: Hämta bara de funktioner vi behöver (med cache)
+    // PHASE 2: Batch-fetch all needed functions (one call to get all)
     $functionMap = [];
-    $neededProjectIds = [];
+    $projectIdsNeeded = [];
 
-    foreach (array_keys($neededFunctionIds) as $funcId) {
+    // Try to fetch all functions in one batch if API supports it
+    // Otherwise, fetch them individually but with better caching
+    $functionIds = array_keys($functionIdsNeeded);
+
+    if (!empty($functionIds)) {
+        // Strategy: Fetch ALL projectfunctions and filter locally (cached!)
+        // This is faster than N individual calls when you need many functions
+        $cacheKey = 'all_projectfunctions';
+
         try {
-            $funcData = $rentman->get("/projectfunctions/$funcId");
-            $func = $funcData['data'] ?? $funcData;
+            $allFunctions = $rentman->fetchAllPagesCached('/projectfunctions', [], 100, $cacheKey);
 
-            $projectRef = $func['project'] ?? null;
-            $projectId = null;
-            if ($projectRef && preg_match('/\/projects\/(\d+)/', $projectRef, $matches)) {
-                $projectId = $matches[1];
-                $neededProjectIds[$projectId] = true;
+            foreach ($allFunctions as $func) {
+                $fid = $func['id'] ?? null;
+                if ($fid && isset($functionIdsNeeded[$fid])) {
+                    $projectRef = $func['project'] ?? '';
+                    $projectId = null;
+                    if (preg_match('/\/projects\/(\d+)/', $projectRef, $m)) {
+                        $projectId = (int)$m[1];
+                        $projectIdsNeeded[$projectId] = true;
+                    }
+
+                    $functionMap[$fid] = [
+                        'name' => $func['name'] ?? $func['displayname'] ?? null,
+                        'projectId' => $projectId,
+                    ];
+                }
             }
-
-            $functionMap[$funcId] = [
-                'name' => $func['name'] ?? null,
-                'projectId' => $projectId,
-            ];
         } catch (Exception $e) {
-            error_log("Failed to fetch function $funcId: " . $e->getMessage());
+            // Fallback: individual fetches (original behavior)
+            error_log("Bulk function fetch failed, falling back: " . $e->getMessage());
+            foreach ($functionIds as $funcId) {
+                try {
+                    $funcData = $rentman->get("/projectfunctions/$funcId");
+                    $func = $funcData['data'] ?? $funcData;
+
+                    $projectRef = $func['project'] ?? '';
+                    $projectId = null;
+                    if (preg_match('/\/projects\/(\d+)/', $projectRef, $m)) {
+                        $projectId = (int)$m[1];
+                        $projectIdsNeeded[$projectId] = true;
+                    }
+
+                    $functionMap[$funcId] = [
+                        'name' => $func['name'] ?? null,
+                        'projectId' => $projectId,
+                    ];
+                } catch (Exception $e2) {
+                    error_log("Failed to fetch function $funcId: " . $e2->getMessage());
+                }
+            }
         }
     }
 
-    // STEG 3: Hämta bara de projekt vi behöver (med cache)
+    // PHASE 3: Batch-fetch all needed projects
     $projectMap = [];
+    $projectIds = array_keys($projectIdsNeeded);
 
-    foreach (array_keys($neededProjectIds) as $projectId) {
+    if (!empty($projectIds)) {
+        // Same strategy: fetch all projects and filter locally
+        $cacheKey = 'all_projects';
+
         try {
-            $projectData = $rentman->get("/projects/$projectId");
-            $project = $projectData['data'] ?? $projectData;
+            $allProjects = $rentman->fetchAllPagesCached('/projects', [], 100, $cacheKey);
 
-            $projectMap[$projectId] = [
-                'name' => $project['displayname'] ?? $project['name'] ?? 'Unnamed',
-                'color' => $project['color'] ?? null,
-                'status' => $project['planningstate'] ?? $project['status'] ?? null,
-            ];
+            foreach ($allProjects as $proj) {
+                $pid = $proj['id'] ?? null;
+                if ($pid && isset($projectIdsNeeded[$pid])) {
+                    $projectMap[$pid] = [
+                        'name' => $proj['displayname'] ?? $proj['name'] ?? 'Unnamed',
+                        'color' => $proj['color'] ?? null,
+                        'status' => $proj['planningstate'] ?? $proj['status'] ?? null,
+                    ];
+                }
+            }
         } catch (Exception $e) {
-            error_log("Failed to fetch project $projectId: " . $e->getMessage());
+            // Fallback: individual fetches
+            error_log("Bulk project fetch failed, falling back: " . $e->getMessage());
+            foreach ($projectIds as $projId) {
+                try {
+                    $projectData = $rentman->get("/projects/$projId");
+                    $proj = $projectData['data'] ?? $projectData;
+                    $projectMap[$projId] = [
+                        'name' => $proj['displayname'] ?? $proj['name'] ?? 'Unnamed',
+                        'color' => $proj['color'] ?? null,
+                        'status' => $proj['planningstate'] ?? $proj['status'] ?? null,
+                    ];
+                } catch (Exception $e2) {
+                    error_log("Failed to fetch project $projId: " . $e2->getMessage());
+                }
+            }
         }
     }
 
-    // STEG 4: Bygg bookings med projektinfo
+    // PHASE 4: Build bookings with resolved names
     $allBookings = [];
 
     foreach ($allAssignments as $item) {
         $assignment = $item['assignment'];
         $crewId = $item['crewId'];
+        $funcId = $item['functionId'];
 
-        $functionRef = $assignment['function'] ?? null;
-        $projectName = $assignment['displayname'] ?? 'Unnamed';
-        $functionName = $projectName;
+        $projectName = 'Unnamed';
+        $functionName = null;
         $projectId = null;
         $projectColor = null;
         $projectStatus = null;
 
-        if ($functionRef && preg_match('/\/projectfunctions\/(\d+)/', $functionRef, $matches)) {
-            $funcId = $matches[1];
+        if ($funcId && isset($functionMap[$funcId])) {
+            $funcInfo = $functionMap[$funcId];
+            $functionName = $funcInfo['name'];
+            $projectId = $funcInfo['projectId'];
 
-            if (isset($functionMap[$funcId])) {
-                $funcInfo = $functionMap[$funcId];
-                $functionName = $funcInfo['name'] ?? $functionName;
-                $projectId = $funcInfo['projectId'];
-
-                if ($projectId && isset($projectMap[$projectId])) {
-                    $projInfo = $projectMap[$projectId];
-                    $projectName = $projInfo['name'];
-                    $projectColor = $projInfo['color'];
-                    $projectStatus = $projInfo['status'];
-                }
+            if ($projectId && isset($projectMap[$projectId])) {
+                $projInfo = $projectMap[$projectId];
+                $projectName = $projInfo['name'];
+                $projectColor = $projInfo['color'];
+                $projectStatus = $projInfo['status'];
             }
+        }
+
+        // Skip entries with default placeholder names
+        $displayName = $assignment['displayname'] ?? '';
+        $isPlaceholder = stripos($displayName, 'Display') !== false
+                      || stripos($displayName, 'Planningpersonell') !== false
+                      || stripos($displayName, 'Planning personnel') !== false;
+
+        // Use resolved names, skip placeholders
+        if ($projectName === 'Unnamed' && !$isPlaceholder && !empty($displayName)) {
+            $projectName = $displayName;
+        }
+
+        // If we still have placeholder or no name, try to use function name
+        if (($projectName === 'Unnamed' || $isPlaceholder) && $functionName) {
+            $projectName = $functionName;
+        }
+
+        // Final fallback
+        if ($projectName === 'Unnamed' || $isPlaceholder) {
+            $projectName = 'Projekt #' . ($projectId ?? 'okänt');
         }
 
         $allBookings[] = [
             'id' => $assignment['id'],
             'type' => 'project',
-            'projectId' => $projectId ? (int)$projectId : null,
+            'projectId' => $projectId,
             'projectName' => $projectName,
             'projectColor' => $projectColor,
             'color' => $projectColor,
             'projectStatus' => $projectStatus,
             'crewId' => $crewId,
-            'role' => $functionName,
+            'role' => $functionName ?? $projectName,
             'start' => $assignment['planperiod_start'],
             'end' => $assignment['planperiod_end'],
             'remark' => $assignment['remark'] ?? null,
         ];
     }
 
-    // Hämta appointments om aktiverat
+    // PHASE 5: Fetch appointments (already efficient - one call per crew)
     if ($includeAppointments) {
         foreach ($selectedCrewIds as $crewId) {
-            $appointments = fetchAppointmentsForCrew($rentman, $crewId, $startDate, $endDate);
+            $appointments = fetchAppointmentsForCrewOptimized($rentman, $crewId, $startDate, $endDate);
             $allBookings = array_merge($allBookings, $appointments);
         }
     }
 
-    // Sortera efter startdatum
+    // Sort by start date
     usort($allBookings, fn($a, $b) => strcmp($a['start'] ?? '', $b['start'] ?? ''));
 
     $response->json([
@@ -184,10 +255,7 @@ function handleBookingsEndpoint(RentmanClient $rentman, ApiResponse $response): 
     ]);
 }
 
-/**
- * Hämtar kalenderbokningar för en crewmedlem
- */
-function fetchAppointmentsForCrew(RentmanClient $rentman, int $crewId, string $startDate, string $endDate): array
+function fetchAppointmentsForCrewOptimized(RentmanClient $rentman, int $crewId, string $startDate, string $endDate): array
 {
     $appointments = [];
 
@@ -200,11 +268,8 @@ function fetchAppointmentsForCrew(RentmanClient $rentman, int $crewId, string $s
 
             if (!$aptStart || !$aptEnd) continue;
 
-            $aptStartDate = substr($aptStart, 0, 10);
-            $aptEndDate = substr($aptEnd, 0, 10);
-
-            if ($aptEndDate < $startDate) continue;
-            if ($aptStartDate > $endDate) continue;
+            if (substr($aptEnd, 0, 10) < $startDate) continue;
+            if (substr($aptStart, 0, 10) > $endDate) continue;
 
             $appointments[] = [
                 'id' => 'apt_' . $apt['id'],

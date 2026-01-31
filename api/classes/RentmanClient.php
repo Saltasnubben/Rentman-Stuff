@@ -171,6 +171,29 @@ class RentmanClient
     }
 
     /**
+     * Hämtar alla sidor med namngivd cache-nyckel (aggregerad cache)
+     * Istället för en fil per URL sparas hela resultatet under en enda nyckel.
+     */
+    public function fetchAllPagesCached(string $endpoint, array $params = [], int $limit = 25, string $cacheKey = null): array
+    {
+        $cacheKey = $cacheKey ?? $this->getCacheKey($endpoint . json_encode($params));
+
+        // Kolla aggregerad cache
+        $cached = $this->getFromCache($cacheKey);
+        if ($cached !== null) {
+            return $cached;
+        }
+
+        // Hämta all data
+        $allData = $this->fetchAllPages($endpoint, $params, $limit);
+
+        // Spara aggregerat
+        $this->saveToCache($cacheKey, $allData);
+
+        return $allData;
+    }
+
+    /**
      * Rensar all cache
      */
     public function clearCache(): void
