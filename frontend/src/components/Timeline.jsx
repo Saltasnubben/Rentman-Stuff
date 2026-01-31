@@ -150,6 +150,17 @@ function Timeline({ crew, bookings, dateRange, loading, viewMode = 'crew' }) {
     )`;
   };
 
+  // Helper to create dashed background for unfilled positions
+  const getDashedBackground = (baseColor) => {
+    return `repeating-linear-gradient(
+      90deg,
+      ${baseColor}40,
+      ${baseColor}40 10px,
+      ${baseColor}20 10px,
+      ${baseColor}20 20px
+    )`;
+  };
+
   // Calculate position and width for a booking bar
   const getBookingStyle = (booking, color) => {
     const bookingStart = startOfDay(parseISO(booking.start));
@@ -166,9 +177,10 @@ function Timeline({ crew, bookings, dateRange, loading, viewMode = 'crew' }) {
     const width = (duration / totalDays) * 100;
 
     const isAppointment = booking.type === 'appointment';
+    const isUnfilled = booking.type === 'unfilled';
     // Check for confirmed status (case-insensitive) - treat null/undefined as confirmed
     const status = (booking.projectStatus || '').toLowerCase();
-    const isConfirmed = isAppointment || !status || status === 'confirmed';
+    const isConfirmed = isAppointment || isUnfilled || !status || status === 'confirmed';
 
     // Debug: log status values (remove after testing)
     if (booking.projectStatus) {
@@ -185,6 +197,16 @@ function Timeline({ crew, bookings, dateRange, loading, viewMode = 'crew' }) {
     }
 
     const finalColor = isAppointment ? lightenColor(baseColor, 20) : baseColor;
+
+    // Use dashed background for unfilled positions
+    if (isUnfilled) {
+      return {
+        left: `${Math.max(0, left)}%`,
+        width: `${Math.min(100 - left, width)}%`,
+        background: getDashedBackground('#f97316'), // Orange for unfilled
+        border: '2px dashed #f97316',
+      };
+    }
 
     // Use striped background for non-confirmed projects
     if (!isConfirmed) {

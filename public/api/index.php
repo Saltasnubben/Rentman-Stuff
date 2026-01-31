@@ -108,6 +108,11 @@ try {
             handleWarmupEndpoint($rentman, $response);
             break;
 
+        case 'unfilled':
+            require __DIR__ . '/endpoints/unfilled.php';
+            handleUnfilledEndpoint($rentman, $response);
+            break;
+
         default:
             $response->notFound("Unknown endpoint: $endpoint");
     }

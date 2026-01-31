@@ -7,7 +7,7 @@ import Timeline from './components/Timeline';
 import StatusBar from './components/StatusBar';
 import ThemeSelector from './components/ThemeSelector';
 import ViewToggle from './components/ViewToggle';
-import { fetchCrew, fetchBookings } from './services/api';
+import { fetchCrew, fetchBookings, fetchUnfilled } from './services/api';
 
 function App() {
   const [crew, setCrew] = useState([]);
@@ -15,6 +15,8 @@ function App() {
   const [availableTags, setAvailableTags] = useState([]);
   const [viewMode, setViewMode] = useState('crew'); // 'crew' or 'project'
   const [showAppointments, setShowAppointments] = useState(true);
+  const [showUnfilled, setShowUnfilled] = useState(false);
+  const [unfilledPositions, setUnfilledPositions] = useState([]);
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [dateRange, setDateRange] = useState({
     start: startOfDay(new Date()),
@@ -77,6 +79,28 @@ function App() {
   useEffect(() => {
     loadBookings();
   }, [loadBookings]);
+
+  // Load unfilled positions when enabled
+  useEffect(() => {
+    async function loadUnfilled() {
+      if (!showUnfilled) {
+        setUnfilledPositions([]);
+        return;
+      }
+
+      try {
+        const response = await fetchUnfilled({
+          startDate: dateRange.start,
+          endDate: dateRange.end,
+        });
+        setUnfilledPositions(response.data || []);
+      } catch (err) {
+        console.error('Failed to load unfilled positions:', err);
+        setUnfilledPositions([]);
+      }
+    }
+    loadUnfilled();
+  }, [showUnfilled, dateRange]);
 
   // Auto-refresh every 30 seconds when enabled
   useEffect(() => {
@@ -207,27 +231,43 @@ function App() {
         {selectedCrew.length > 0 && (
           <>
             <div className="flex items-center justify-between mb-4">
-              {/* Appointments toggle */}
-              <label className="flex items-center gap-2 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={showAppointments}
-                  onChange={(e) => setShowAppointments(e.target.checked)}
-                  className="w-4 h-4 text-primary-600 bg-gray-100 border-gray-300 rounded focus:ring-primary-500 dark:focus:ring-primary-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600"
-                />
-                <span className="text-sm text-gray-700 dark:text-gray-300 flex items-center gap-1.5">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                  </svg>
-                  Visa kalenderbokningar
-                </span>
-              </label>
+              {/* Toggles */}
+              <div className="flex items-center gap-4">
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={showAppointments}
+                    onChange={(e) => setShowAppointments(e.target.checked)}
+                    className="w-4 h-4 text-primary-600 bg-gray-100 border-gray-300 rounded focus:ring-primary-500 dark:focus:ring-primary-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600"
+                  />
+                  <span className="text-sm text-gray-700 dark:text-gray-300 flex items-center gap-1.5">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    Kalenderbokningar
+                  </span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={showUnfilled}
+                    onChange={(e) => setShowUnfilled(e.target.checked)}
+                    className="w-4 h-4 text-orange-600 bg-gray-100 border-gray-300 rounded focus:ring-orange-500 dark:focus:ring-orange-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600"
+                  />
+                  <span className="text-sm text-gray-700 dark:text-gray-300 flex items-center gap-1.5">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                    </svg>
+                    Otillsatta roller
+                  </span>
+                </label>
+              </div>
 
               <ViewToggle view={viewMode} onChange={setViewMode} />
             </div>
             <Timeline
               crew={selectedCrew}
-              bookings={bookings}
+              bookings={[...bookings, ...unfilledPositions]}
               dateRange={dateRange}
               loading={loading}
               viewMode={viewMode}

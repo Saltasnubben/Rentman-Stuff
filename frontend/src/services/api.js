@@ -89,6 +89,26 @@ export async function fetchProjects({ startDate, endDate }) {
 }
 
 /**
+ * Fetch unfilled project functions (positions without assigned crew)
+ */
+export async function fetchUnfilled({ startDate, endDate, projectIds = [] }) {
+  const params = {
+    startDate: format(startDate, 'yyyy-MM-dd'),
+    endDate: format(endDate, 'yyyy-MM-dd'),
+  };
+
+  if (projectIds.length > 0) {
+    params.projectIds = projectIds.join(',');
+  }
+
+  const response = await api.get('/unfilled', { params });
+  return {
+    data: response.data.data || [],
+    count: response.data.count || 0
+  };
+}
+
+/**
  * Check API health
  */
 export async function checkHealth() {
