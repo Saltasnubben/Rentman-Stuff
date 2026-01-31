@@ -50,10 +50,7 @@ function handleUnfilledEndpoint(RentmanClient $rentman, ApiResponse $response): 
             
             if (!$projectStart || !$projectEnd) return false;
             
-            // DEBUG: Logga status för att hitta rätt fältnamn
-            // Inkludera alla projekt tills vi hittar rätt status-fält
-            // $status = strtolower($project['planningstate'] ?? $project['status'] ?? '');
-            // if ($status !== 'confirmed') return false;
+            // Visa alla projekt (inget status-filter - Rentman har inte status-fält på projekt)
             
             $projectStartDate = substr($projectStart, 0, 10);
             $projectEndDate = substr($projectEnd, 0, 10);
@@ -155,9 +152,7 @@ function handleUnfilledEndpoint(RentmanClient $rentman, ApiResponse $response): 
                 ], 100);
                 
                 foreach ($subprojects as $subproject) {
-                    // Endast bekräftade subprojekt
-                    $subStatus = strtolower($subproject['planningstate'] ?? $subproject['status'] ?? '');
-                    if ($subStatus !== 'confirmed') continue;
+                    // Inkludera alla subprojekt (inget status-filter)
                     
                     $subId = $subproject['id'];
                     $subInfo = [
