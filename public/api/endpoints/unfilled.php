@@ -33,9 +33,12 @@ function handleUnfilledEndpoint(RentmanClient $rentman, ApiResponse $response): 
 
     $timings['step1_start'] = microtime(true) - $t0;
 
-    // STEG 1: Hämta alla projekt i datumintervallet
+    // STEG 1: Hämta alla projekt i datumintervallet (begränsa fält för att minska data)
     try {
-        $allProjects = $rentman->fetchAllPages('/projects', [], 50);
+        // Begränsa till aktiva projekt och färre fält
+        $allProjects = $rentman->fetchAllPages('/projects', [
+            'fields' => 'id,displayname,name,planperiod_start,planperiod_end,color,planningstate,status'
+        ], 100);
         
         // Filtrera på datum
         $relevantProjects = array_filter($allProjects, function($project) use ($startDate, $endDate, $filterProjectIds) {
@@ -83,8 +86,10 @@ function handleUnfilledEndpoint(RentmanClient $rentman, ApiResponse $response): 
         ];
 
         try {
-            // Hämta projektets funktioner
-            $functions = $rentman->fetchAllPages("/projects/$projectId/projectfunctions", [], 100);
+            // Hämta projektets funktioner (begränsa fält)
+            $functions = $rentman->fetchAllPages("/projects/$projectId/projectfunctions", [
+                'fields' => 'id,name,displayname,planperiod_start,planperiod_end,crewmember_count,quantity,remark'
+            ], 100);
             
             foreach ($functions as $func) {
                 $funcId = $func['id'];
