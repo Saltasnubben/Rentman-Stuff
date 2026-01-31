@@ -8,7 +8,7 @@ export default defineConfig({
   build: {
     // Bygg till ../public så det hamnar bredvid api/-mappen
     outDir: '../public',
-    emptyOutDir: true,
+    emptyOutDir: false, // VIKTIGT: Radera inte API-mappen!
     sourcemap: false,
   },
   server: {
