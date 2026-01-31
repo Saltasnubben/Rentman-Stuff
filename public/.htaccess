@@ -8,3 +8,4 @@ RewriteRule ^api/(.*)$ api/index.php [L,QSA]
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
 RewriteRule . index.html [L]
+# Trigger redeploy Sat Jan 31 22:55:33 CET 2026
