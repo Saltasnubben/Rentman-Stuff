@@ -314,7 +314,7 @@ function Timeline({ crew, bookings, dateRange, loading, viewMode = 'crew' }) {
                                 {booking.projectName}
                               </span>
                               <span className="text-white/80 text-xs truncate drop-shadow-sm">
-                                {booking.role !== booking.projectName ? booking.role : ''}
+                                {booking.role && booking.role !== booking.projectName ? `${booking.role} · ` : ''}
                                 {format(parseISO(booking.start), 'HH:mm')} - {format(parseISO(booking.end), 'HH:mm')}
                               </span>
                             </div>
