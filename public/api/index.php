@@ -96,7 +96,7 @@ try {
 
         case 'vehicles':
             require __DIR__ . '/endpoints/vehicles.php';
-            handleVehiclesEndpoint($rentman, $response, $subEndpoint);
+            handleVehiclesEndpoint($rentman, $response, $id);
             break;
 
         case 'cache':
