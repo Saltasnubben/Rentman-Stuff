@@ -89,6 +89,35 @@ export async function fetchProjects({ startDate, endDate }) {
 }
 
 /**
+ * Fetch all vehicles
+ */
+export async function fetchVehicles() {
+  const response = await api.get('/vehicles');
+  return response.data;
+}
+
+/**
+ * Fetch vehicle bookings
+ */
+export async function fetchVehicleBookings({ vehicleIds, startDate, endDate }) {
+  if (!vehicleIds || vehicleIds.length === 0) {
+    return { data: [], count: 0 };
+  }
+
+  const params = {
+    vehicleIds: vehicleIds.join(','),
+    startDate: format(startDate, 'yyyy-MM-dd'),
+    endDate: format(endDate, 'yyyy-MM-dd'),
+  };
+
+  const response = await api.get('/vehicles/bookings', { params });
+  return {
+    data: response.data.data || [],
+    count: response.data.count || 0
+  };
+}
+
+/**
  * Fetch unfilled project functions (positions without assigned crew)
  */
 export async function fetchUnfilled({ startDate, endDate, projectIds = [] }) {

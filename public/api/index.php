@@ -94,6 +94,11 @@ try {
             handleBookingsEndpoint($rentman, $response);
             break;
 
+        case 'vehicles':
+            require __DIR__ . '/endpoints/vehicles.php';
+            handleVehiclesEndpoint($rentman, $response, $subEndpoint);
+            break;
+
         case 'cache':
             if ($_SERVER['REQUEST_METHOD'] === 'DELETE' || isset($_GET['clear'])) {
                 $rentman->clearCache();

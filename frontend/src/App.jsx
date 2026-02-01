@@ -7,12 +7,15 @@ import Timeline from './components/Timeline';
 import StatusBar from './components/StatusBar';
 import ThemeSelector from './components/ThemeSelector';
 import ViewToggle from './components/ViewToggle';
-import { fetchCrew, fetchBookings, fetchUnfilled } from './services/api';
+import { fetchCrew, fetchBookings, fetchUnfilled, fetchVehicles, fetchVehicleBookings } from './services/api';
 
 function App() {
   const [crew, setCrew] = useState([]);
   const [selectedCrew, setSelectedCrew] = useState([]);
   const [availableTags, setAvailableTags] = useState([]);
+  const [vehicles, setVehicles] = useState([]);
+  const [selectedVehicles, setSelectedVehicles] = useState([]);
+  const [vehicleBookings, setVehicleBookings] = useState([]);
   const [viewMode, setViewMode] = useState('crew'); // 'crew' or 'project'
   const [showAppointments, setShowAppointments] = useState(true);
   const [showUnfilled, setShowUnfilled] = useState(false);
@@ -28,24 +31,28 @@ function App() {
   const [apiStatus, setApiStatus] = useState(null);
   const [lastRefresh, setLastRefresh] = useState(null);
 
-  // Load crew members on mount
+  // Load crew members and vehicles on mount
   useEffect(() => {
-    async function loadCrew() {
+    async function loadInitialData() {
       try {
         setLoading(true);
-        const response = await fetchCrew();
-        setCrew(response.data);
-        setAvailableTags(response.availableTags || []);
+        const [crewResponse, vehiclesResponse] = await Promise.all([
+          fetchCrew(),
+          fetchVehicles(),
+        ]);
+        setCrew(crewResponse.data);
+        setAvailableTags(crewResponse.availableTags || []);
+        setVehicles(vehiclesResponse.data || []);
         setApiStatus('connected');
       } catch (err) {
-        console.error('Failed to load crew:', err);
-        setError('Kunde inte ladda crewmedlemmar. Kontrollera API-token.');
+        console.error('Failed to load initial data:', err);
+        setError('Kunde inte ladda data. Kontrollera API-token.');
         setApiStatus('error');
       } finally {
         setLoading(false);
       }
     }
-    loadCrew();
+    loadInitialData();
   }, []);
 
   // Load bookings when selection changes
@@ -101,6 +108,29 @@ function App() {
     }
     loadUnfilled();
   }, [showUnfilled, dateRange]);
+
+  // Load vehicle bookings when vehicles are selected
+  useEffect(() => {
+    async function loadVehicleBookings() {
+      if (selectedVehicles.length === 0) {
+        setVehicleBookings([]);
+        return;
+      }
+
+      try {
+        const response = await fetchVehicleBookings({
+          vehicleIds: selectedVehicles.map(v => v.id),
+          startDate: dateRange.start,
+          endDate: dateRange.end,
+        });
+        setVehicleBookings(response.data || []);
+      } catch (err) {
+        console.error('Failed to load vehicle bookings:', err);
+        setVehicleBookings([]);
+      }
+    }
+    loadVehicleBookings();
+  }, [selectedVehicles, dateRange]);
 
   // Auto-refresh every 30 seconds when enabled
   useEffect(() => {
@@ -177,7 +207,7 @@ function App() {
       <main className="px-4 sm:px-6 lg:px-8 py-6">
         {/* Controls */}
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 mb-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Välj crewmedlemmar
@@ -189,6 +219,29 @@ function App() {
                 loading={loading && crew.length === 0}
                 availableTags={availableTags}
               />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                🚐 Välj fordon
+              </label>
+              <select
+                multiple
+                value={selectedVehicles.map(v => v.id.toString())}
+                onChange={(e) => {
+                  const selectedIds = Array.from(e.target.selectedOptions, opt => parseInt(opt.value));
+                  setSelectedVehicles(vehicles.filter(v => selectedIds.includes(v.id)));
+                }}
+                className="w-full h-24 px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500"
+              >
+                {vehicles.map(v => (
+                  <option key={v.id} value={v.id}>
+                    {v.name} {v.licenseplate ? `(${v.licenseplate})` : ''}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                Ctrl/Cmd+klick för flera
+              </p>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -217,18 +270,18 @@ function App() {
         )}
 
         {/* Empty state */}
-        {selectedCrew.length === 0 && !error && (
+        {selectedCrew.length === 0 && selectedVehicles.length === 0 && !error && (
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-12 text-center">
             <svg className="w-16 h-16 text-gray-300 dark:text-gray-600 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
             </svg>
-            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Välj crewmedlemmar</h3>
-            <p className="text-gray-500 dark:text-gray-400">Välj en eller flera crewmedlemmar för att se deras bokningar.</p>
+            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Välj crewmedlemmar eller fordon</h3>
+            <p className="text-gray-500 dark:text-gray-400">Välj en eller flera crewmedlemmar/fordon för att se deras bokningar.</p>
           </div>
         )}
 
         {/* View toggle and Timeline */}
-        {selectedCrew.length > 0 && (
+        {(selectedCrew.length > 0 || selectedVehicles.length > 0) && (
           <>
             <div className="flex items-center justify-between mb-4">
               {/* Toggles */}
@@ -267,7 +320,9 @@ function App() {
             </div>
             <Timeline
               crew={selectedCrew}
-              bookings={[...bookings, ...unfilledPositions]}
+              bookings={[...bookings, ...unfilledPositions, ...vehicleBookings]}
+              vehicles={selectedVehicles}
+              vehicleBookings={vehicleBookings}
               dateRange={dateRange}
               loading={loading}
               viewMode={viewMode}

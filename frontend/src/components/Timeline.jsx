@@ -13,7 +13,7 @@ import {
 } from 'date-fns';
 import { sv } from 'date-fns/locale';
 
-function Timeline({ crew, bookings, dateRange, loading, viewMode = 'crew' }) {
+function Timeline({ crew, bookings, vehicles = [], vehicleBookings = [], dateRange, loading, viewMode = 'crew' }) {
   // Generate days for the timeline header
   const days = useMemo(() => {
     return eachDayOfInterval({
@@ -81,6 +81,18 @@ function Timeline({ crew, bookings, dateRange, loading, viewMode = 'crew' }) {
     return grouped;
   }, [crew, bookings]);
 
+  // Group vehicle bookings by vehicle
+  const bookingsByVehicle = useMemo(() => {
+    const grouped = {};
+
+    vehicles.forEach(vehicle => {
+      const vBookings = vehicleBookings.filter(b => b.vehicleId === vehicle.id);
+      grouped[vehicle.id] = assignBookingsToRows(vBookings);
+    });
+
+    return grouped;
+  }, [vehicles, vehicleBookings]);
+
   // Group bookings by project (for project view) with row assignments
   const bookingsByProject = useMemo(() => {
     const grouped = {};
@@ -112,6 +124,12 @@ function Timeline({ crew, bookings, dateRange, loading, viewMode = 'crew' }) {
   const getCrewName = (crewId) => {
     const member = crew.find(c => c.id === crewId);
     return member ? member.name : 'Okänd';
+  };
+
+  // Get vehicle name by ID
+  const getVehicleName = (vehicleId) => {
+    const vehicle = vehicles.find(v => v.id === vehicleId);
+    return vehicle ? vehicle.name : 'Okänt fordon';
   };
 
   // Get crew member color by ID
@@ -178,9 +196,10 @@ function Timeline({ crew, bookings, dateRange, loading, viewMode = 'crew' }) {
 
     const isAppointment = booking.type === 'appointment';
     const isUnfilled = booking.type === 'unfilled';
+    const isVehicle = booking.type === 'vehicle';
     // Check for confirmed status (case-insensitive) - treat null/undefined as confirmed
     const status = (booking.projectStatus || '').toLowerCase();
-    const isConfirmed = isAppointment || isUnfilled || !status || status === 'confirmed';
+    const isConfirmed = isAppointment || isUnfilled || isVehicle || !status || status === 'confirmed';
 
     // Debug: log status values (remove after testing)
     if (booking.projectStatus) {
@@ -374,6 +393,99 @@ function Timeline({ crew, bookings, dateRange, loading, viewMode = 'crew' }) {
             </div>
           );
         })}
+
+        {/* Vehicle rows */}
+        {vehicles.length > 0 && (
+          <>
+            {/* Vehicle section header */}
+            <div className="flex bg-blue-50 dark:bg-blue-900/20 border-t-2 border-blue-300 dark:border-blue-700">
+              <div className="w-56 flex-shrink-0 px-4 py-2 border-r border-gray-200 dark:border-gray-700">
+                <span className="text-sm font-semibold text-blue-700 dark:text-blue-300">🚐 Fordon</span>
+              </div>
+              <div className="flex-1" />
+            </div>
+
+            {vehicles.map(vehicle => {
+              const { bookings: vBookings, rowCount } = bookingsByVehicle[vehicle.id] || { bookings: [], rowCount: 0 };
+              const rowHeight = Math.max(80, rowCount * 52 + 16);
+
+              return (
+                <div key={`vehicle-${vehicle.id}`} className="flex" style={{ minHeight: `${rowHeight}px` }}>
+                  {/* Vehicle name */}
+                  <div className="w-56 flex-shrink-0 px-4 py-3 border-r border-gray-200 dark:border-gray-700 flex items-start gap-2 bg-blue-50/30 dark:bg-blue-900/10">
+                    <div className="w-3 h-3 rounded-full flex-shrink-0 mt-1 bg-blue-500" />
+                    <span className="font-medium text-gray-900 dark:text-white">
+                      {vehicle.name}
+                    </span>
+                  </div>
+
+                  {/* Bookings area */}
+                  <div className="flex-1 relative py-2 px-1">
+                    {/* Day grid lines */}
+                    <div className="absolute inset-0 flex pointer-events-none">
+                      {days.map((day) => (
+                        <div
+                          key={day.toISOString()}
+                          className={`flex-1 border-r border-gray-50 dark:border-gray-700/50 last:border-r-0 ${
+                            isWeekend(day) ? 'bg-red-50/50 dark:bg-red-900/10' : ''
+                          }`}
+                        />
+                      ))}
+                    </div>
+
+                    {/* Vehicle booking bars */}
+                    {vBookings.length === 0 ? (
+                      <div className="h-full flex items-center justify-center text-sm text-gray-400 dark:text-gray-500">
+                        Inga bokningar
+                      </div>
+                    ) : (
+                      <div className="relative h-full">
+                        {vBookings.map((booking) => (
+                          <div
+                            key={booking.id}
+                            className="absolute rounded-md shadow-sm cursor-pointer transition-transform hover:scale-[1.02] hover:shadow-md group"
+                            style={{
+                              ...getBookingStyle(booking, '#3b82f6'),
+                              top: `${booking.rowIndex * 52 + 4}px`,
+                              height: '48px'
+                            }}
+                            title={`${booking.projectName}\n${format(parseISO(booking.start), 'HH:mm')} - ${format(parseISO(booking.end), 'HH:mm')}`}
+                          >
+                            <div className="h-full px-3 py-1 flex items-center justify-between overflow-hidden">
+                              <div className="flex flex-col justify-center min-w-0 flex-1">
+                                <span className="text-white text-sm font-semibold truncate drop-shadow-sm">
+                                  {booking.projectName}
+                                </span>
+                                <span className="text-white/80 text-xs truncate drop-shadow-sm">
+                                  {format(parseISO(booking.start), 'HH:mm')} - {format(parseISO(booking.end), 'HH:mm')}
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Tooltip */}
+                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+                              <div className="bg-gray-900 dark:bg-gray-700 text-white text-xs rounded-lg px-3 py-2 shadow-lg whitespace-nowrap">
+                                <div className="font-semibold text-sm">{booking.projectName}</div>
+                                <div className="text-gray-400 mt-1">
+                                  {format(parseISO(booking.start), 'd MMM HH:mm', { locale: sv })} -{' '}
+                                  {format(parseISO(booking.end), 'HH:mm', { locale: sv })}
+                                </div>
+                                {booking.remark && (
+                                  <div className="text-gray-400 mt-1 max-w-xs truncate">{booking.remark}</div>
+                                )}
+                                <div className="absolute left-1/2 -translate-x-1/2 top-full border-4 border-transparent border-t-gray-900 dark:border-t-gray-700" />
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </>
+        )}
       </div>
     </>
   );
