@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { format, addDays, startOfDay } from 'date-fns';
 import { sv } from 'date-fns/locale';
 import CrewSelector from './components/CrewSelector';
+import VehicleSelector from './components/VehicleSelector';
 import DateRangePicker from './components/DateRangePicker';
 import Timeline from './components/Timeline';
 import StatusBar from './components/StatusBar';
@@ -224,24 +225,12 @@ function App() {
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 🚐 Välj fordon
               </label>
-              <select
-                multiple
-                value={selectedVehicles.map(v => v.id.toString())}
-                onChange={(e) => {
-                  const selectedIds = Array.from(e.target.selectedOptions, opt => parseInt(opt.value));
-                  setSelectedVehicles(vehicles.filter(v => selectedIds.includes(v.id)));
-                }}
-                className="w-full h-24 px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500"
-              >
-                {vehicles.map(v => (
-                  <option key={v.id} value={v.id}>
-                    {v.name} {v.licenseplate ? `(${v.licenseplate})` : ''}
-                  </option>
-                ))}
-              </select>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                Ctrl/Cmd+klick för flera
-              </p>
+              <VehicleSelector
+                vehicles={vehicles}
+                selected={selectedVehicles}
+                onChange={setSelectedVehicles}
+                loading={loading && vehicles.length === 0}
+              />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
