@@ -62,8 +62,18 @@ function handleDebugEndpoint(RentmanClient $rentman, ApiResponse $response): voi
                 ]);
                 break;
                 
+            case 'projecttypes':
+                // Hämta projekttyper
+                $data = $rentman->fetchAllPages('/projecttypes', [], 100);
+                $response->json([
+                    'type' => 'projecttypes',
+                    'count' => count($data),
+                    'data' => $data,
+                ]);
+                break;
+                
             default:
-                $response->badRequest("Unknown type: $type. Use: status, project, vehicles, projectvehicle");
+                $response->badRequest("Unknown type: $type. Use: status, project, vehicles, projectvehicle, projecttypes");
         }
     } catch (Exception $e) {
         $response->error("API Error: " . $e->getMessage(), 500);
