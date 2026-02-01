@@ -113,6 +113,11 @@ try {
             handleUnfilledEndpoint($rentman, $response);
             break;
 
+        case 'debug':
+            require __DIR__ . '/endpoints/debug.php';
+            handleDebugEndpoint($rentman, $response);
+            break;
+
         default:
             $response->notFound("Unknown endpoint: $endpoint");
     }
