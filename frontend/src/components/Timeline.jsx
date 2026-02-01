@@ -266,26 +266,26 @@ function Timeline({ crew, bookings, vehicles = [], vehicleBookings = [], dateRan
     <>
       {/* Timeline header with days */}
       <div className="flex border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
-        {/* Crew name column */}
-        <div className="w-56 flex-shrink-0 px-4 py-3 font-medium text-gray-700 dark:text-gray-300 border-r border-gray-200 dark:border-gray-700">
+        {/* Crew name column - sticky on mobile */}
+        <div className="w-28 sm:w-40 lg:w-56 flex-shrink-0 px-2 sm:px-4 py-2 sm:py-3 font-medium text-xs sm:text-sm text-gray-700 dark:text-gray-300 border-r border-gray-200 dark:border-gray-700 sticky left-0 bg-gray-50 dark:bg-gray-900 z-10">
           Crewmedlem
         </div>
 
-        {/* Days */}
-        <div className="flex-1 flex">
+        {/* Days - scrollable area */}
+        <div className="flex-1 flex min-w-0 overflow-x-auto">
           {days.map((day, index) => {
             const weekend = isWeekend(day);
             return (
               <div
                 key={day.toISOString()}
-                className={`flex-1 px-2 py-3 text-center text-sm border-r border-gray-100 dark:border-gray-700 last:border-r-0 ${
+                className={`flex-1 min-w-[3rem] sm:min-w-[4rem] px-1 sm:px-2 py-2 sm:py-3 text-center text-xs sm:text-sm border-r border-gray-100 dark:border-gray-700 last:border-r-0 ${
                   weekend ? 'bg-red-50 dark:bg-red-900/20' : ''
                 }`}
               >
                 <div className={`font-medium ${weekend ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-white'}`}>
                   {format(day, 'd', { locale: sv })}
                 </div>
-                <div className={`text-xs ${weekend ? 'text-red-500 dark:text-red-400' : 'text-gray-500 dark:text-gray-400'}`}>
+                <div className={`text-[10px] sm:text-xs ${weekend ? 'text-red-500 dark:text-red-400' : 'text-gray-500 dark:text-gray-400'}`}>
                   {format(day, 'EEE', { locale: sv })}
                 </div>
               </div>
@@ -298,29 +298,29 @@ function Timeline({ crew, bookings, vehicles = [], vehicleBookings = [], dateRan
       <div className="divide-y divide-gray-100 dark:divide-gray-700">
         {crew.map(member => {
           const { bookings: memberBookings, rowCount } = bookingsByCrew[member.id] || { bookings: [], rowCount: 0 };
-          const rowHeight = Math.max(80, rowCount * 52 + 16);
+          const rowHeight = Math.max(60, rowCount * 44 + 12);
 
           return (
             <div key={member.id} className="flex" style={{ minHeight: `${rowHeight}px` }}>
-              {/* Crew name */}
-              <div className="w-56 flex-shrink-0 px-4 py-3 border-r border-gray-200 dark:border-gray-700 flex items-start gap-2 bg-gray-50/50 dark:bg-gray-900/50">
+              {/* Crew name - sticky on mobile */}
+              <div className="w-28 sm:w-40 lg:w-56 flex-shrink-0 px-2 sm:px-4 py-2 sm:py-3 border-r border-gray-200 dark:border-gray-700 flex items-start gap-1.5 sm:gap-2 bg-gray-50/50 dark:bg-gray-900/50 sticky left-0 z-10">
                 <div
-                  className="w-3 h-3 rounded-full flex-shrink-0 mt-1"
+                  className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full flex-shrink-0 mt-0.5 sm:mt-1"
                   style={{ backgroundColor: member.color || '#3b82f6' }}
                 />
-                <span className="font-medium text-gray-900 dark:text-white">
+                <span className="font-medium text-xs sm:text-sm text-gray-900 dark:text-white truncate">
                   {member.name}
                 </span>
               </div>
 
               {/* Bookings area */}
-              <div className="flex-1 relative py-2 px-1">
+              <div className="flex-1 relative py-1 sm:py-2 px-0.5 sm:px-1 min-w-0 overflow-x-auto">
                 {/* Day grid lines */}
                 <div className="absolute inset-0 flex pointer-events-none">
                   {days.map((day) => (
                     <div
                       key={day.toISOString()}
-                      className={`flex-1 border-r border-gray-50 dark:border-gray-700/50 last:border-r-0 ${
+                      className={`flex-1 min-w-[3rem] sm:min-w-[4rem] border-r border-gray-50 dark:border-gray-700/50 last:border-r-0 ${
                         isWeekend(day) ? 'bg-red-50/50 dark:bg-red-900/10' : ''
                       }`}
                     />
@@ -329,7 +329,7 @@ function Timeline({ crew, bookings, vehicles = [], vehicleBookings = [], dateRan
 
                 {/* Booking bars */}
                 {memberBookings.length === 0 ? (
-                  <div className="h-full flex items-center justify-center text-sm text-gray-400 dark:text-gray-500">
+                  <div className="h-full flex items-center justify-center text-xs sm:text-sm text-gray-400 dark:text-gray-500">
                     Inga bokningar
                   </div>
                 ) : (
@@ -339,31 +339,31 @@ function Timeline({ crew, bookings, vehicles = [], vehicleBookings = [], dateRan
                       return (
                         <div
                           key={booking.id}
-                          className={`absolute rounded-md shadow-sm cursor-pointer transition-transform hover:scale-[1.02] hover:shadow-md group ${
-                            isAppointment ? 'border-2 border-white/30' : ''
+                          className={`absolute rounded sm:rounded-md shadow-sm cursor-pointer transition-transform hover:scale-[1.02] hover:shadow-md group ${
+                            isAppointment ? 'border sm:border-2 border-white/30' : ''
                           }`}
                           style={{
                             ...getBookingStyle(booking),
-                            top: `${booking.rowIndex * 52 + 4}px`,
-                            height: '48px'
+                            top: `${booking.rowIndex * 44 + 2}px`,
+                            height: '40px'
                           }}
                           title={`${booking.projectName}\n${booking.role}\n${format(parseISO(booking.start), 'HH:mm')} - ${format(parseISO(booking.end), 'HH:mm')}`}
                         >
-                          <div className="h-full px-3 py-1 flex items-center justify-between overflow-hidden">
+                          <div className="h-full px-1.5 sm:px-3 py-0.5 sm:py-1 flex items-center justify-between overflow-hidden">
                             <div className="flex flex-col justify-center min-w-0 flex-1">
-                              <span className="text-white text-sm font-semibold truncate drop-shadow-sm">
+                              <span className="text-white text-[10px] sm:text-sm font-semibold truncate drop-shadow-sm">
                                 {booking.projectName}
                               </span>
-                              <span className="text-white/80 text-xs truncate drop-shadow-sm">
+                              <span className="text-white/80 text-[9px] sm:text-xs truncate drop-shadow-sm hidden sm:block">
                                 {booking.role && booking.role !== booking.projectName ? `${booking.role} · ` : ''}
                                 {format(parseISO(booking.start), 'HH:mm')} - {format(parseISO(booking.end), 'HH:mm')}
                               </span>
                             </div>
-                            {isAppointment && <CalendarIcon />}
+                            <span className="hidden sm:block">{isAppointment && <CalendarIcon />}</span>
                           </div>
 
-                          {/* Tooltip */}
-                          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+                          {/* Tooltip - hidden on mobile (touch) */}
+                          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10 hidden sm:block">
                             <div className="bg-gray-900 dark:bg-gray-700 text-white text-xs rounded-lg px-3 py-2 shadow-lg whitespace-nowrap">
                               <div className="font-semibold text-sm flex items-center gap-2">
                                 {booking.projectName}
@@ -399,34 +399,34 @@ function Timeline({ crew, bookings, vehicles = [], vehicleBookings = [], dateRan
           <>
             {/* Vehicle section header */}
             <div className="flex bg-blue-50 dark:bg-blue-900/20 border-t-2 border-blue-300 dark:border-blue-700">
-              <div className="w-56 flex-shrink-0 px-4 py-2 border-r border-gray-200 dark:border-gray-700">
-                <span className="text-sm font-semibold text-blue-700 dark:text-blue-300">🚐 Fordon</span>
+              <div className="w-28 sm:w-40 lg:w-56 flex-shrink-0 px-2 sm:px-4 py-1.5 sm:py-2 border-r border-gray-200 dark:border-gray-700 sticky left-0 bg-blue-50 dark:bg-blue-900/20 z-10">
+                <span className="text-xs sm:text-sm font-semibold text-blue-700 dark:text-blue-300">🚐 Fordon</span>
               </div>
               <div className="flex-1" />
             </div>
 
             {vehicles.map(vehicle => {
               const { bookings: vBookings, rowCount } = bookingsByVehicle[vehicle.id] || { bookings: [], rowCount: 0 };
-              const rowHeight = Math.max(80, rowCount * 52 + 16);
+              const rowHeight = Math.max(60, rowCount * 44 + 12);
 
               return (
                 <div key={`vehicle-${vehicle.id}`} className="flex" style={{ minHeight: `${rowHeight}px` }}>
-                  {/* Vehicle name */}
-                  <div className="w-56 flex-shrink-0 px-4 py-3 border-r border-gray-200 dark:border-gray-700 flex items-start gap-2 bg-blue-50/30 dark:bg-blue-900/10">
-                    <div className="w-3 h-3 rounded-full flex-shrink-0 mt-1 bg-blue-500" />
-                    <span className="font-medium text-gray-900 dark:text-white">
+                  {/* Vehicle name - sticky on mobile */}
+                  <div className="w-28 sm:w-40 lg:w-56 flex-shrink-0 px-2 sm:px-4 py-2 sm:py-3 border-r border-gray-200 dark:border-gray-700 flex items-start gap-1.5 sm:gap-2 bg-blue-50/30 dark:bg-blue-900/10 sticky left-0 z-10">
+                    <div className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full flex-shrink-0 mt-0.5 sm:mt-1 bg-blue-500" />
+                    <span className="font-medium text-xs sm:text-sm text-gray-900 dark:text-white truncate">
                       {vehicle.name}
                     </span>
                   </div>
 
                   {/* Bookings area */}
-                  <div className="flex-1 relative py-2 px-1">
+                  <div className="flex-1 relative py-1 sm:py-2 px-0.5 sm:px-1 min-w-0 overflow-x-auto">
                     {/* Day grid lines */}
                     <div className="absolute inset-0 flex pointer-events-none">
                       {days.map((day) => (
                         <div
                           key={day.toISOString()}
-                          className={`flex-1 border-r border-gray-50 dark:border-gray-700/50 last:border-r-0 ${
+                          className={`flex-1 min-w-[3rem] sm:min-w-[4rem] border-r border-gray-50 dark:border-gray-700/50 last:border-r-0 ${
                             isWeekend(day) ? 'bg-red-50/50 dark:bg-red-900/10' : ''
                           }`}
                         />
@@ -435,7 +435,7 @@ function Timeline({ crew, bookings, vehicles = [], vehicleBookings = [], dateRan
 
                     {/* Vehicle booking bars */}
                     {vBookings.length === 0 ? (
-                      <div className="h-full flex items-center justify-center text-sm text-gray-400 dark:text-gray-500">
+                      <div className="h-full flex items-center justify-center text-xs sm:text-sm text-gray-400 dark:text-gray-500">
                         Inga bokningar
                       </div>
                     ) : (
@@ -443,27 +443,27 @@ function Timeline({ crew, bookings, vehicles = [], vehicleBookings = [], dateRan
                         {vBookings.map((booking) => (
                           <div
                             key={booking.id}
-                            className="absolute rounded-md shadow-sm cursor-pointer transition-transform hover:scale-[1.02] hover:shadow-md group"
+                            className="absolute rounded sm:rounded-md shadow-sm cursor-pointer transition-transform hover:scale-[1.02] hover:shadow-md group"
                             style={{
                               ...getBookingStyle(booking, '#3b82f6'),
-                              top: `${booking.rowIndex * 52 + 4}px`,
-                              height: '48px'
+                              top: `${booking.rowIndex * 44 + 2}px`,
+                              height: '40px'
                             }}
                             title={`${booking.projectName}\n${format(parseISO(booking.start), 'HH:mm')} - ${format(parseISO(booking.end), 'HH:mm')}`}
                           >
-                            <div className="h-full px-3 py-1 flex items-center justify-between overflow-hidden">
+                            <div className="h-full px-1.5 sm:px-3 py-0.5 sm:py-1 flex items-center justify-between overflow-hidden">
                               <div className="flex flex-col justify-center min-w-0 flex-1">
-                                <span className="text-white text-sm font-semibold truncate drop-shadow-sm">
+                                <span className="text-white text-[10px] sm:text-sm font-semibold truncate drop-shadow-sm">
                                   {booking.projectName}
                                 </span>
-                                <span className="text-white/80 text-xs truncate drop-shadow-sm">
+                                <span className="text-white/80 text-[9px] sm:text-xs truncate drop-shadow-sm hidden sm:block">
                                   {format(parseISO(booking.start), 'HH:mm')} - {format(parseISO(booking.end), 'HH:mm')}
                                 </span>
                               </div>
                             </div>
 
-                            {/* Tooltip */}
-                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+                            {/* Tooltip - hidden on mobile */}
+                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10 hidden sm:block">
                               <div className="bg-gray-900 dark:bg-gray-700 text-white text-xs rounded-lg px-3 py-2 shadow-lg whitespace-nowrap">
                                 <div className="font-semibold text-sm">{booking.projectName}</div>
                                 <div className="text-gray-400 mt-1">
@@ -495,26 +495,26 @@ function Timeline({ crew, bookings, vehicles = [], vehicleBookings = [], dateRan
     <>
       {/* Timeline header with days */}
       <div className="flex border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
-        {/* Project name column */}
-        <div className="w-56 flex-shrink-0 px-4 py-3 font-medium text-gray-700 dark:text-gray-300 border-r border-gray-200 dark:border-gray-700">
+        {/* Project name column - sticky on mobile */}
+        <div className="w-28 sm:w-40 lg:w-56 flex-shrink-0 px-2 sm:px-4 py-2 sm:py-3 font-medium text-xs sm:text-sm text-gray-700 dark:text-gray-300 border-r border-gray-200 dark:border-gray-700 sticky left-0 bg-gray-50 dark:bg-gray-900 z-10">
           Projekt
         </div>
 
-        {/* Days */}
-        <div className="flex-1 flex">
+        {/* Days - scrollable area */}
+        <div className="flex-1 flex min-w-0 overflow-x-auto">
           {days.map((day) => {
             const weekend = isWeekend(day);
             return (
               <div
                 key={day.toISOString()}
-                className={`flex-1 px-2 py-3 text-center text-sm border-r border-gray-100 dark:border-gray-700 last:border-r-0 ${
+                className={`flex-1 min-w-[3rem] sm:min-w-[4rem] px-1 sm:px-2 py-2 sm:py-3 text-center text-xs sm:text-sm border-r border-gray-100 dark:border-gray-700 last:border-r-0 ${
                   weekend ? 'bg-red-50 dark:bg-red-900/20' : ''
                 }`}
               >
                 <div className={`font-medium ${weekend ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-white'}`}>
                   {format(day, 'd', { locale: sv })}
                 </div>
-                <div className={`text-xs ${weekend ? 'text-red-500 dark:text-red-400' : 'text-gray-500 dark:text-gray-400'}`}>
+                <div className={`text-[10px] sm:text-xs ${weekend ? 'text-red-500 dark:text-red-400' : 'text-gray-500 dark:text-gray-400'}`}>
                   {format(day, 'EEE', { locale: sv })}
                 </div>
               </div>
@@ -527,28 +527,28 @@ function Timeline({ crew, bookings, vehicles = [], vehicleBookings = [], dateRan
       <div className="divide-y divide-gray-100 dark:divide-gray-700">
         {bookingsByProject.map(project => {
           const projectBookings = project.bookings;
-          const rowHeight = Math.max(80, project.rowCount * 52 + 16);
+          const rowHeight = Math.max(60, project.rowCount * 44 + 12);
 
           return (
             <div key={project.projectId || project.projectName} className="flex" style={{ minHeight: `${rowHeight}px` }}>
-              {/* Project name */}
-              <div className="w-56 flex-shrink-0 px-4 py-3 border-r border-gray-200 dark:border-gray-700 flex items-start gap-2 bg-gray-50/50 dark:bg-gray-900/50">
+              {/* Project name - sticky on mobile */}
+              <div className="w-28 sm:w-40 lg:w-56 flex-shrink-0 px-2 sm:px-4 py-2 sm:py-3 border-r border-gray-200 dark:border-gray-700 flex items-start gap-1.5 sm:gap-2 bg-gray-50/50 dark:bg-gray-900/50 sticky left-0 z-10">
                 <div
-                  className="w-3 h-3 rounded-full flex-shrink-0 mt-1 bg-primary-500"
+                  className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full flex-shrink-0 mt-0.5 sm:mt-1 bg-primary-500"
                 />
-                <span className="font-medium text-gray-900 dark:text-white">
+                <span className="font-medium text-xs sm:text-sm text-gray-900 dark:text-white truncate">
                   {project.projectName}
                 </span>
               </div>
 
               {/* Bookings area */}
-              <div className="flex-1 relative py-2 px-1">
+              <div className="flex-1 relative py-1 sm:py-2 px-0.5 sm:px-1 min-w-0 overflow-x-auto">
                 {/* Day grid lines */}
                 <div className="absolute inset-0 flex pointer-events-none">
                   {days.map((day) => (
                     <div
                       key={day.toISOString()}
-                      className={`flex-1 border-r border-gray-50 dark:border-gray-700/50 last:border-r-0 ${
+                      className={`flex-1 min-w-[3rem] sm:min-w-[4rem] border-r border-gray-50 dark:border-gray-700/50 last:border-r-0 ${
                         isWeekend(day) ? 'bg-red-50/50 dark:bg-red-900/10' : ''
                       }`}
                     />
@@ -563,31 +563,31 @@ function Timeline({ crew, bookings, vehicles = [], vehicleBookings = [], dateRan
                     return (
                       <div
                         key={booking.id}
-                        className={`absolute rounded-md shadow-sm cursor-pointer transition-transform hover:scale-[1.02] hover:shadow-md group ${
-                          isAppointment ? 'border-2 border-white/30' : ''
+                        className={`absolute rounded sm:rounded-md shadow-sm cursor-pointer transition-transform hover:scale-[1.02] hover:shadow-md group ${
+                          isAppointment ? 'border sm:border-2 border-white/30' : ''
                         }`}
                         style={{
                           ...getBookingStyle(booking, crewColor),
-                          top: `${booking.rowIndex * 52 + 4}px`,
-                          height: '48px'
+                          top: `${booking.rowIndex * 44 + 2}px`,
+                          height: '40px'
                         }}
                         title={`${getCrewName(booking.crewId)}\n${booking.role}\n${format(parseISO(booking.start), 'HH:mm')} - ${format(parseISO(booking.end), 'HH:mm')}`}
                       >
-                        <div className="h-full px-3 py-1 flex items-center justify-between overflow-hidden">
+                        <div className="h-full px-1.5 sm:px-3 py-0.5 sm:py-1 flex items-center justify-between overflow-hidden">
                           <div className="flex flex-col justify-center min-w-0 flex-1">
-                            <span className="text-white text-sm font-semibold truncate drop-shadow-sm">
+                            <span className="text-white text-[10px] sm:text-sm font-semibold truncate drop-shadow-sm">
                               {getCrewName(booking.crewId)}
                             </span>
-                            <span className="text-white/80 text-xs truncate drop-shadow-sm">
+                            <span className="text-white/80 text-[9px] sm:text-xs truncate drop-shadow-sm hidden sm:block">
                               {booking.role && booking.role !== booking.projectName ? `${booking.role} · ` : ''}
                               {format(parseISO(booking.start), 'HH:mm')} - {format(parseISO(booking.end), 'HH:mm')}
                             </span>
                           </div>
-                          {isAppointment && <CalendarIcon />}
+                          <span className="hidden sm:block">{isAppointment && <CalendarIcon />}</span>
                         </div>
 
-                        {/* Tooltip */}
-                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+                        {/* Tooltip - hidden on mobile */}
+                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10 hidden sm:block">
                           <div className="bg-gray-900 dark:bg-gray-700 text-white text-xs rounded-lg px-3 py-2 shadow-lg whitespace-nowrap">
                             <div className="font-semibold text-sm flex items-center gap-2">
                               {getCrewName(booking.crewId)}
@@ -621,7 +621,7 @@ function Timeline({ crew, bookings, vehicles = [], vehicleBookings = [], dateRan
   );
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-x-auto">
       {viewMode === 'crew' ? renderCrewView() : renderProjectView()}
 
       {/* Empty state */}
