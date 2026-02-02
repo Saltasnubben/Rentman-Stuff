@@ -43,42 +43,53 @@ function handleBookingsEndpoint(RentmanClient $rentman, ApiResponse $response): 
         return;
     }
 
-    // STEG 1: Hämta alla assignments för alla crew först
+    // STEG 1: Hämta ALLA projectcrew i bulk (cachad) och filtrera på valda crew
+    // Detta är MYCKET snabbare än att göra N separata anrop
     $allAssignments = [];
     $neededFunctionIds = [];
     $timings['step1_start'] = microtime(true) - $t0;
 
-    foreach ($selectedCrewIds as $crewId) {
-        try {
-            $params = ['crewmember' => "/crew/$crewId"];
-            $assignments = $rentman->fetchAllPages("/projectcrew", $params, 100);
+    // Skapa lookup-set för snabb filtrering
+    $selectedCrewSet = array_flip($selectedCrewIds);
 
-            foreach ($assignments as $assignment) {
-                $assignmentStart = $assignment['planperiod_start'] ?? null;
-                $assignmentEnd = $assignment['planperiod_end'] ?? null;
+    try {
+        // Hämta ALLA projectcrew (cachad i 5 min)
+        $allProjectCrew = $rentman->fetchAllPages("/projectcrew", [], 300);
+        $timings['projectcrew_total'] = count($allProjectCrew);
 
-                if (!$assignmentStart || !$assignmentEnd) continue;
+        foreach ($allProjectCrew as $assignment) {
+            // Extrahera crew ID från referens
+            $crewRef = $assignment['crewmember'] ?? null;
+            if (!$crewRef || !preg_match('/\/crew\/(\d+)/', $crewRef, $matches)) continue;
+            $crewId = (int)$matches[1];
 
-                $assignmentStartDate = substr($assignmentStart, 0, 10);
-                $assignmentEndDate = substr($assignmentEnd, 0, 10);
+            // Filtrera på valda crew
+            if (!isset($selectedCrewSet[$crewId])) continue;
 
-                if ($assignmentEndDate < $startDate) continue;
-                if ($assignmentStartDate > $endDate) continue;
+            $assignmentStart = $assignment['planperiod_start'] ?? null;
+            $assignmentEnd = $assignment['planperiod_end'] ?? null;
 
-                // Samla function IDs vi behöver
-                $functionRef = $assignment['function'] ?? null;
-                if ($functionRef && preg_match('/\/projectfunctions\/(\d+)/', $functionRef, $matches)) {
-                    $neededFunctionIds[$matches[1]] = true;
-                }
+            if (!$assignmentStart || !$assignmentEnd) continue;
 
-                $allAssignments[] = [
-                    'assignment' => $assignment,
-                    'crewId' => $crewId,
-                ];
+            $assignmentStartDate = substr($assignmentStart, 0, 10);
+            $assignmentEndDate = substr($assignmentEnd, 0, 10);
+
+            if ($assignmentEndDate < $startDate) continue;
+            if ($assignmentStartDate > $endDate) continue;
+
+            // Samla function IDs vi behöver
+            $functionRef = $assignment['function'] ?? null;
+            if ($functionRef && preg_match('/\/projectfunctions\/(\d+)/', $functionRef, $matches)) {
+                $neededFunctionIds[$matches[1]] = true;
             }
-        } catch (Exception $e) {
-            error_log("Failed to fetch assignments for crew $crewId: " . $e->getMessage());
+
+            $allAssignments[] = [
+                'assignment' => $assignment,
+                'crewId' => $crewId,
+            ];
         }
+    } catch (Exception $e) {
+        error_log("Failed to fetch projectcrew: " . $e->getMessage());
     }
 
     // STEG 2: Hämta bara de funktioner vi behöver (med cache)
@@ -235,7 +246,7 @@ function fetchAppointmentsForCrew(RentmanClient $rentman, int $crewId, string $s
     $appointments = [];
 
     try {
-        $rawAppointments = $rentman->fetchAllPages("/crew/$crewId/appointments", [], 100);
+        $rawAppointments = $rentman->fetchAllPages("/crew/$crewId/appointments", [], 300);
 
         foreach ($rawAppointments as $apt) {
             $aptStart = $apt['start'] ?? null;

@@ -1,13 +1,11 @@
 <?php
 /**
- * Unfilled Functions Endpoint
+ * Unfilled Functions Endpoint - OPTIMIZED v4
  * 
- * GET /api/unfilled - Hämta projektfunktioner utan tilldelad personal
- *
- * Query params:
- * - startDate: Startdatum (ISO format)
- * - endDate: Slutdatum (ISO format)
- * - projectIds: Kommaseparerade projekt-ID:n (valfritt)
+ * Strategi för maximal prestanda:
+ * 1. Hämta subprojects (cachad), filtrera på datum + status -> få relevanta projekt-IDs
+ * 2. För varje relevant projekt: hämta funktioner OCH crew i samma loop
+ * 3. Skippa bulk-fetch av projectcrew (det var flaskhalsen!)
  */
 
 function handleUnfilledEndpoint(RentmanClient $rentman, ApiResponse $response): void
@@ -18,170 +16,163 @@ function handleUnfilledEndpoint(RentmanClient $rentman, ApiResponse $response): 
 
     $startDate = $_GET['startDate'] ?? null;
     $endDate = $_GET['endDate'] ?? null;
-    $projectIdsParam = $_GET['projectIds'] ?? '';
+    $statusFilter = $_GET['status'] ?? '3';
 
     if (empty($startDate) || empty($endDate)) {
         $response->badRequest('startDate and endDate are required');
         return;
     }
 
-    // Valfritt: filtrera på specifika projekt
-    $filterProjectIds = [];
-    if (!empty($projectIdsParam)) {
-        $filterProjectIds = array_map('intval', array_filter(explode(',', $projectIdsParam)));
-    }
+    $allowedStatuses = $statusFilter === 'all' ? null : array_map('intval', explode(',', $statusFilter));
 
-    $timings['step1_start'] = microtime(true) - $t0;
-
-    // STEG 1: Hämta alla projekt i datumintervallet (begränsa fält för att minska data)
+    // STEG 1: Hämta subprojects och filtrera - detta ger oss relevanta projekt
+    $relevantProjectIds = [];
+    $projectStatusMap = [];
+    
     try {
-        // Hämta projekt (utan fields-begränsning för att få status)
-        $allProjects = $rentman->fetchAllPages('/projects', [], 25);
+        $allSubprojects = $rentman->fetchAllPages('/subprojects', [], 300);
         
-        // Filtrera på datum
-        $relevantProjects = array_filter($allProjects, function($project) use ($startDate, $endDate, $filterProjectIds) {
-            // Om specifika projektIDs angivna, filtrera på dem
-            if (!empty($filterProjectIds) && !in_array($project['id'], $filterProjectIds)) {
-                return false;
+        foreach ($allSubprojects as $sp) {
+            $spStart = $sp['planperiod_start'] ?? null;
+            $spEnd = $sp['planperiod_end'] ?? null;
+            
+            if (!$spStart || !$spEnd) continue;
+            if (substr($spEnd, 0, 10) < $startDate) continue;
+            if (substr($spStart, 0, 10) > $endDate) continue;
+            
+            $projectRef = $sp['project'] ?? null;
+            if (!$projectRef || !preg_match('/\/projects\/(\d+)/', $projectRef, $matches)) continue;
+            $projId = (int)$matches[1];
+            
+            $statusRef = $sp['status'] ?? null;
+            $statusId = null;
+            if ($statusRef && preg_match('/\/statuses\/(\d+)/', $statusRef, $matches)) {
+                $statusId = (int)$matches[1];
             }
             
-            $projectStart = $project['planperiod_start'] ?? null;
-            $projectEnd = $project['planperiod_end'] ?? null;
+            if (!isset($projectStatusMap[$projId]) || $statusId === 3) {
+                $projectStatusMap[$projId] = $statusId;
+            }
             
-            if (!$projectStart || !$projectEnd) return false;
+            if ($allowedStatuses !== null && ($statusId === null || !in_array($statusId, $allowedStatuses))) {
+                continue;
+            }
             
-            // Visa alla projekt (inget status-filter - Rentman har inte status-fält på projekt)
-            
-            $projectStartDate = substr($projectStart, 0, 10);
-            $projectEndDate = substr($projectEnd, 0, 10);
-            
-            // Projekt inom datumintervall
-            if ($projectEndDate < $startDate) return false;
-            if ($projectStartDate > $endDate) return false;
-            
-            return true;
-        });
+            $relevantProjectIds[$projId] = true;
+        }
         
-        $relevantProjects = array_values($relevantProjects);
+        $timings['subprojects_total'] = count($allSubprojects);
+        $timings['relevant_projects'] = count($relevantProjectIds);
     } catch (Exception $e) {
-        $response->error("Failed to fetch projects: " . $e->getMessage(), 500);
+        error_log("Failed to fetch subprojects: " . $e->getMessage());
+    }
+
+    $timings['step1_done'] = microtime(true) - $t0;
+
+    if (empty($relevantProjectIds)) {
+        $response->json([
+            'data' => [],
+            'count' => 0,
+            'period' => ['startDate' => $startDate, 'endDate' => $endDate],
+            'statusFilter' => $statusFilter,
+        ]);
         return;
     }
 
-    $timings['step1_projects'] = count($relevantProjects);
-    $timings['step2_start'] = microtime(true) - $t0;
-
-    // STEG 2: För varje projekt, hämta funktioner och kolla om de har crew
-    $unfilledFunctions = [];
+    // STEG 2: Hämta projekt-info
     $projectMap = [];
+    try {
+        $allProjects = $rentman->fetchAllPages('/projects', [], 300);
+        foreach ($allProjects as $p) {
+            if (isset($relevantProjectIds[$p['id']])) {
+                $projectMap[$p['id']] = [
+                    'name' => $p['displayname'] ?? $p['name'] ?? 'Unnamed',
+                    'color' => $p['color'] ?? null,
+                ];
+            }
+        }
+    } catch (Exception $e) {
+        error_log("Failed to fetch projects: " . $e->getMessage());
+    }
 
-    // Hjälpfunktion för att processa funktioner från ett projekt/subprojekt
-    $processFunctions = function($projectId, $projectInfo, $functions) use (&$unfilledFunctions, $startDate, $endDate, $rentman) {
-        foreach ($functions as $func) {
-            $funcId = $func['id'];
-            $funcStart = $func['planperiod_start'] ?? $projectInfo['start'] ?? null;
-            $funcEnd = $func['planperiod_end'] ?? $projectInfo['end'] ?? null;
+    $timings['step2_done'] = microtime(true) - $t0;
+
+    // STEG 3: För varje projekt - hämta funktioner OCH kolla crew
+    $unfilledFunctions = [];
+    $statusNames = [1 => 'Pending', 2 => 'Canceled', 3 => 'Confirmed', 4 => 'Prepped', 5 => 'On location', 6 => 'Returned', 7 => 'Inquiry', 8 => 'Concept'];
+    $functionsChecked = 0;
+    $apiCallsForFunctions = 0;
+
+    foreach (array_keys($relevantProjectIds) as $projectId) {
+        $apiCallsForFunctions++;
+        
+        try {
+            // Hämta funktioner för detta projekt
+            $functions = $rentman->fetchAllPages("/projects/$projectId/projectfunctions", [], 300);
             
-            if (!$funcStart || !$funcEnd) continue;
+            // Hämta crew för detta projekt (för att veta vilka funktioner har tilldelad crew)
+            $projectCrew = $rentman->fetchAllPages("/projects/$projectId/projectcrew", [], 300);
+            $apiCallsForFunctions++;
             
-            // Filtrera på datumintervall
-            $funcStartDate = substr($funcStart, 0, 10);
-            $funcEndDate = substr($funcEnd, 0, 10);
-            
-            if ($funcEndDate < $startDate) continue;
-            if ($funcStartDate > $endDate) continue;
-            
-            // Hämta crew tilldelad till denna funktion
-            $crewCount = $func['crewmember_count'] ?? null;
-            
-            // Om crewmember_count inte finns, kolla manuellt
-            if ($crewCount === null) {
-                try {
-                    $projectCrew = $rentman->get("/projectfunctions/$funcId/projectcrew");
-                    $crewCount = count($projectCrew['data'] ?? []);
-                } catch (Exception $e) {
-                    $crewCount = 0;
+            // Bygg set av funktions-IDs som har crew
+            $functionsWithCrew = [];
+            foreach ($projectCrew as $pc) {
+                $funcRef = $pc['function'] ?? null;
+                if ($funcRef && preg_match('/\/projectfunctions\/(\d+)/', $funcRef, $matches)) {
+                    $functionsWithCrew[(int)$matches[1]] = true;
                 }
             }
             
-            // Lägg till om ingen crew tilldelad
-            if ($crewCount === 0) {
+            foreach ($functions as $func) {
+                $functionsChecked++;
+                $funcId = $func['id'];
+                
+                // Skippa om har crew
+                if (isset($functionsWithCrew[$funcId])) continue;
+                
+                // Kolla datum
+                $funcStart = $func['planperiod_start'] ?? null;
+                $funcEnd = $func['planperiod_end'] ?? null;
+                
+                if (!$funcStart || !$funcEnd) continue;
+                if (substr($funcEnd, 0, 10) < $startDate) continue;
+                if (substr($funcStart, 0, 10) > $endDate) continue;
+                
+                $statusId = $projectStatusMap[$projectId] ?? null;
+                $projectInfo = $projectMap[$projectId] ?? ['name' => 'Projekt #' . $projectId, 'color' => null];
+                
+                $roleName = $func['name'] ?? $func['displayname'] ?? 'Okänd roll';
+                $isTransport = stripos($roleName, 'transport') !== false;
+                
                 $unfilledFunctions[] = [
                     'id' => 'unfilled_' . $funcId,
                     'type' => 'unfilled',
+                    'subtype' => $isTransport ? 'transport' : 'crew',
                     'functionId' => $funcId,
                     'projectId' => $projectId,
                     'projectName' => $projectInfo['name'],
                     'projectColor' => $projectInfo['color'],
                     'color' => $projectInfo['color'],
-                    'projectStatus' => $projectInfo['status'],
-                    'role' => $func['name'] ?? $func['displayname'] ?? 'Okänd roll',
+                    'statusId' => $statusId,
+                    'statusName' => $statusNames[$statusId] ?? null,
+                    'role' => $roleName,
                     'start' => $funcStart,
                     'end' => $funcEnd,
                     'crewId' => null,
-                    'remark' => $func['remark'] ?? null,
-                    'quantity' => $func['quantity'] ?? 1,
+                    'remark' => $func['remark_planner'] ?? null,
+                    'quantity' => $func['amount'] ?? 1,
+                    'isTransport' => $isTransport,
                 ];
             }
-        }
-    };
-
-    foreach ($relevantProjects as $project) {
-        $projectId = $project['id'];
-        $projectInfo = [
-            'name' => $project['displayname'] ?? $project['name'] ?? 'Unnamed',
-            'color' => $project['color'] ?? null,
-            'status' => $project['planningstate'] ?? $project['status'] ?? null,
-            'start' => $project['planperiod_start'] ?? null,
-            'end' => $project['planperiod_end'] ?? null,
-        ];
-        $projectMap[$projectId] = $projectInfo;
-
-        try {
-            // Hämta projektets funktioner (begränsa fält)
-            $functions = $rentman->fetchAllPages("/projects/$projectId/projectfunctions", [
-                'fields' => 'id,name,displayname,planperiod_start,planperiod_end,crewmember_count,quantity,remark'
-            ], 100);
-            
-            $processFunctions($projectId, $projectInfo, $functions);
-            
-            // Hämta även subprojekt
-            try {
-                $subprojects = $rentman->fetchAllPages("/projects/$projectId/subprojects", [
-                    'fields' => 'id,displayname,name,planperiod_start,planperiod_end,color,planningstate,status'
-                ], 100);
-                
-                foreach ($subprojects as $subproject) {
-                    // Inkludera alla subprojekt (inget status-filter)
-                    
-                    $subId = $subproject['id'];
-                    $subInfo = [
-                        'name' => ($projectInfo['name'] ?? '') . ' > ' . ($subproject['displayname'] ?? $subproject['name'] ?? 'Subprojekt'),
-                        'color' => $subproject['color'] ?? $projectInfo['color'],
-                        'status' => $subproject['planningstate'] ?? $subproject['status'] ?? null,
-                        'start' => $subproject['planperiod_start'] ?? $projectInfo['start'],
-                        'end' => $subproject['planperiod_end'] ?? $projectInfo['end'],
-                    ];
-                    
-                    // Hämta subprojektets funktioner
-                    $subFunctions = $rentman->fetchAllPages("/projects/$subId/projectfunctions", [
-                        'fields' => 'id,name,displayname,planperiod_start,planperiod_end,crewmember_count,quantity,remark'
-                    ], 100);
-                    
-                    $processFunctions($subId, $subInfo, $subFunctions);
-                }
-            } catch (Exception $e) {
-                // Subprojekt kanske inte finns - ignorera
-            }
         } catch (Exception $e) {
-            error_log("Failed to fetch functions for project $projectId: " . $e->getMessage());
+            error_log("Failed to fetch data for project $projectId: " . $e->getMessage());
         }
     }
 
-    $timings['step2_done'] = microtime(true) - $t0;
-    $timings['unfilled_count'] = count($unfilledFunctions);
+    $timings['functions_checked'] = $functionsChecked;
+    $timings['api_calls_step3'] = $apiCallsForFunctions;
+    $timings['step3_done'] = microtime(true) - $t0;
 
-    // Sortera efter startdatum
     usort($unfilledFunctions, fn($a, $b) => strcmp($a['start'] ?? '', $b['start'] ?? ''));
 
     $timings['total'] = microtime(true) - $t0;
@@ -190,39 +181,11 @@ function handleUnfilledEndpoint(RentmanClient $rentman, ApiResponse $response): 
         'data' => $unfilledFunctions,
         'count' => count($unfilledFunctions),
         'period' => ['startDate' => $startDate, 'endDate' => $endDate],
+        'statusFilter' => $statusFilter === 'all' ? 'all' : array_map(fn($s) => $statusNames[(int)$s] ?? $s, explode(',', $statusFilter)),
     ];
 
     if ($debug) {
-        // Samla unika statusvärden för debugging
-        $statusValues = [];
-        foreach ($relevantProjects as $p) {
-            $s = $p['planningstate'] ?? $p['status'] ?? 'MISSING';
-            $statusValues[$s] = ($statusValues[$s] ?? 0) + 1;
-        }
-        
-        // Visa första projektet helt för debugging
-        $sampleProject = null;
-        if (!empty($relevantProjects)) {
-            $sampleFields = array_keys($relevantProjects[0]);
-            // Visa några intressanta fält inklusive eventuell status-referens
-            $p = $relevantProjects[0];
-            $sampleProject = [
-                'id' => $p['id'] ?? null,
-                'name' => $p['displayname'] ?? $p['name'] ?? null,
-                'status_field' => $p['status'] ?? 'NOT_FOUND',
-                'project_type' => $p['project_type'] ?? 'NOT_FOUND',
-                'all_keys' => array_keys($p),
-            ];
-        } else {
-            $sampleFields = [];
-        }
-        
-        $result['_debug'] = [
-            'timings_seconds' => $timings,
-            'status_values_found' => $statusValues,
-            'projects_checked' => count($relevantProjects),
-            'sample_project' => $sampleProject,
-        ];
+        $result['_debug'] = ['timings_seconds' => $timings];
     }
 
     $response->json($result);

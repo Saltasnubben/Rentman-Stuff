@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useRef, useState, useCallback, useEffect } from 'react';
 import {
   format,
   eachDayOfInterval,
@@ -9,11 +9,135 @@ import {
   parseISO,
   max,
   min,
-  isWeekend
+  isWeekend,
+  addDays
 } from 'date-fns';
 import { sv } from 'date-fns/locale';
 
-function Timeline({ crew, bookings, vehicles = [], vehicleBookings = [], dateRange, loading, viewMode = 'crew' }) {
+// Icon för projektbokningar (horisontell bar över tre vertikala staplar)
+const ProjectIcon = ({ className = "" }) => (
+  <svg className={className} fill="currentColor" viewBox="0 0 20 20">
+    {/* Horisontell bar överst */}
+    <rect x="2" y="2" width="16" height="3" rx="0.5" />
+    {/* Tre vertikala staplar */}
+    <rect x="3" y="7" width="3" height="11" rx="0.5" />
+    <rect x="8.5" y="7" width="3" height="11" rx="0.5" />
+    <rect x="14" y="7" width="3" height="11" rx="0.5" />
+  </svg>
+);
+
+// Icon för kalenderbokningar
+const CalendarIconSmall = ({ className = "" }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+  </svg>
+);
+
+// Icon för otillsatta roller
+const UnfilledIcon = ({ className = "" }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+  </svg>
+);
+
+function Timeline({ crew, bookings, vehicles = [], vehicleBookings = [], dateRange, loading, viewMode = 'crew', onDateRangeChange }) {
+  console.log('Timeline rendered, onDateRangeChange:', !!onDateRangeChange);
+  
+  // Drag-to-scroll state
+  const containerRef = useRef(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStartX, setDragStartX] = useState(0);
+  const [hasDragged, setHasDragged] = useState(false);
+
+  // Get X position from mouse or touch event
+  const getClientX = (e) => {
+    if (e.touches && e.touches.length > 0) {
+      return e.touches[0].clientX;
+    }
+    return e.clientX;
+  };
+
+  // Handle drag start (mouse)
+  const handleMouseDown = useCallback((e) => {
+    // Only handle left mouse button and only in the timeline area (not on booking bars)
+    if (e.button !== 0) return;
+    if (e.target.closest('[data-booking]')) return;
+    
+    console.log('Drag started at', e.clientX);
+    setIsDragging(true);
+    setDragStartX(e.clientX);
+    setHasDragged(false);
+    e.preventDefault();
+  }, []);
+
+  // Handle drag start (touch)
+  const handleTouchStart = useCallback((e) => {
+    if (e.target.closest('[data-booking]')) return;
+    
+    setIsDragging(true);
+    setDragStartX(getClientX(e));
+    setHasDragged(false);
+  }, []);
+
+  // Handle drag move
+  const handleDragMove = useCallback((e) => {
+    if (!isDragging || !onDateRangeChange) {
+      console.log('Drag move skipped:', { isDragging, hasCallback: !!onDateRangeChange });
+      return;
+    }
+    
+    const clientX = getClientX(e);
+    const deltaX = clientX - dragStartX;
+    const containerWidth = containerRef.current?.offsetWidth || 800;
+    const totalDays = differenceInDays(dateRange.end, dateRange.start) + 1;
+    
+    // Calculate how many days to shift (negative = move forward in time)
+    const pixelsPerDay = (containerWidth - 224) / totalDays; // 224px = sidebar width
+    const daysDelta = Math.round(-deltaX / pixelsPerDay);
+    
+    console.log('Drag move:', { deltaX, containerWidth, totalDays, pixelsPerDay, daysDelta });
+    
+    if (Math.abs(daysDelta) >= 1) {
+      setHasDragged(true);
+      const newStart = addDays(dateRange.start, daysDelta);
+      const newEnd = addDays(dateRange.end, daysDelta);
+      
+      console.log('Updating date range:', { newStart, newEnd });
+      onDateRangeChange({
+        start: startOfDay(newStart),
+        end: startOfDay(newEnd)
+      });
+      
+      setDragStartX(clientX);
+    }
+  }, [isDragging, dragStartX, dateRange, onDateRangeChange]);
+
+  // Handle drag end
+  const handleDragEnd = useCallback(() => {
+    setIsDragging(false);
+  }, []);
+
+  // Add global event listeners for drag
+  useEffect(() => {
+    if (isDragging) {
+      // Mouse events
+      document.addEventListener('mousemove', handleDragMove);
+      document.addEventListener('mouseup', handleDragEnd);
+      // Touch events
+      document.addEventListener('touchmove', handleDragMove, { passive: false });
+      document.addEventListener('touchend', handleDragEnd);
+      document.addEventListener('touchcancel', handleDragEnd);
+      
+      return () => {
+        document.removeEventListener('mousemove', handleDragMove);
+        document.removeEventListener('mouseup', handleDragEnd);
+        document.removeEventListener('touchmove', handleDragMove);
+        document.removeEventListener('touchend', handleDragEnd);
+        document.removeEventListener('touchcancel', handleDragEnd);
+      };
+    }
+  }, [isDragging, handleDragMove, handleDragEnd]);
+
   // Generate days for the timeline header
   const days = useMemo(() => {
     return eachDayOfInterval({
@@ -103,6 +227,12 @@ function Timeline({ crew, bookings, vehicles = [], vehicleBookings = [], dateRan
         grouped[projectKey] = {
           projectId: booking.projectId,
           projectName: booking.projectName,
+          projectNumber: booking.projectNumber,
+          accountManager: booking.accountManager,
+          projectStatus: booking.projectStatus,
+          statusId: booking.statusId,
+          isAppointment: booking.type === 'appointment',
+          isUnfilled: booking.type === 'unfilled',
           bookings: []
         };
       }
@@ -218,12 +348,15 @@ function Timeline({ crew, bookings, vehicles = [], vehicleBookings = [], dateRan
     const finalColor = isAppointment ? lightenColor(baseColor, 20) : baseColor;
 
     // Use dashed background for unfilled positions
+    // Transport = orange, Crew = red
     if (isUnfilled) {
+      const isTransport = booking.isTransport || (booking.role && booking.role.toLowerCase().includes('transport'));
+      const unfilledColor = isTransport ? '#f97316' : '#ef4444'; // Orange for transport, Red for crew
       return {
         left: `${Math.max(0, left)}%`,
         width: `${Math.min(100 - left, width)}%`,
-        background: getDashedBackground('#f97316'), // Orange for unfilled
-        border: '2px dashed #f97316',
+        background: getDashedBackground(unfilledColor),
+        border: `2px dashed ${unfilledColor}`,
       };
     }
 
@@ -339,6 +472,7 @@ function Timeline({ crew, bookings, vehicles = [], vehicleBookings = [], dateRan
                       return (
                         <div
                           key={booking.id}
+                          data-booking
                           className={`absolute rounded sm:rounded-md shadow-sm cursor-pointer transition-transform hover:scale-[1.02] hover:shadow-md group ${
                             isAppointment ? 'border sm:border-2 border-white/30' : ''
                           }`}
@@ -443,6 +577,7 @@ function Timeline({ crew, bookings, vehicles = [], vehicleBookings = [], dateRan
                         {vBookings.map((booking) => (
                           <div
                             key={booking.id}
+                            data-booking
                             className="absolute rounded sm:rounded-md shadow-sm cursor-pointer transition-transform hover:scale-[1.02] hover:shadow-md group"
                             style={{
                               ...getBookingStyle(booking, '#3b82f6'),
@@ -532,13 +667,34 @@ function Timeline({ crew, bookings, vehicles = [], vehicleBookings = [], dateRan
           return (
             <div key={project.projectId || project.projectName} className="flex" style={{ minHeight: `${rowHeight}px` }}>
               {/* Project name - sticky on mobile */}
-              <div className="w-28 sm:w-40 lg:w-56 flex-shrink-0 px-2 sm:px-4 py-2 sm:py-3 border-r border-gray-200 dark:border-gray-700 flex items-start gap-1.5 sm:gap-2 bg-gray-50/50 dark:bg-gray-900/50 sticky left-0 z-10">
-                <div
-                  className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full flex-shrink-0 mt-0.5 sm:mt-1 bg-primary-500"
-                />
-                <span className="font-medium text-xs sm:text-sm text-gray-900 dark:text-white truncate">
-                  {project.projectName}
-                </span>
+              <div className="w-28 sm:w-40 lg:w-56 flex-shrink-0 px-2 sm:px-4 py-2 sm:py-3 border-r border-gray-200 dark:border-gray-700 flex flex-col justify-center gap-0.5 bg-gray-50/50 dark:bg-gray-900/50 sticky left-0 z-10">
+                <div className="flex items-start gap-1.5 sm:gap-2">
+                  {/* Icon baserat på typ och status */}
+                  {project.isUnfilled ? (
+                    <UnfilledIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0 mt-0.5 text-orange-500" />
+                  ) : project.isAppointment ? (
+                    <CalendarIconSmall className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0 mt-0.5 text-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.5)]" />
+                  ) : (
+                    <ProjectIcon 
+                      className={`w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0 mt-0.5 ${
+                        project.statusId === 3 || project.projectStatus === 'confirmed' 
+                          ? 'text-green-500' 
+                          : 'text-yellow-500'
+                      }`} 
+                    />
+                  )}
+                  <span className="font-medium text-xs sm:text-sm text-gray-900 dark:text-white truncate">
+                    {project.projectName}
+                  </span>
+                </div>
+                {/* Projektnummer och Account Manager */}
+                {(project.projectNumber || project.accountManager) && (
+                  <div className="ml-5 sm:ml-6 text-[10px] sm:text-xs text-gray-500 dark:text-gray-400 truncate">
+                    {project.projectNumber && <span>#{project.projectNumber}</span>}
+                    {project.projectNumber && project.accountManager && <span> · </span>}
+                    {project.accountManager && <span>AM: {project.accountManager}</span>}
+                  </div>
+                )}
               </div>
 
               {/* Bookings area */}
@@ -555,28 +711,31 @@ function Timeline({ crew, bookings, vehicles = [], vehicleBookings = [], dateRan
                   ))}
                 </div>
 
-                {/* Booking bars - showing crew members */}
+                {/* Booking bars - showing crew members or vehicles */}
                 <div className="relative h-full">
                   {projectBookings.map((booking) => {
-                    const crewColor = getCrewColor(booking.crewId);
+                    const isVehicle = booking.type === 'vehicle';
                     const isAppointment = booking.type === 'appointment';
+                    const displayName = isVehicle ? getVehicleName(booking.vehicleId) : getCrewName(booking.crewId);
+                    const itemColor = isVehicle ? '#3b82f6' : getCrewColor(booking.crewId); // Blue for vehicles
                     return (
                       <div
                         key={booking.id}
+                        data-booking
                         className={`absolute rounded sm:rounded-md shadow-sm cursor-pointer transition-transform hover:scale-[1.02] hover:shadow-md group ${
                           isAppointment ? 'border sm:border-2 border-white/30' : ''
                         }`}
                         style={{
-                          ...getBookingStyle(booking, crewColor),
+                          ...getBookingStyle(booking, itemColor),
                           top: `${booking.rowIndex * 44 + 2}px`,
                           height: '40px'
                         }}
-                        title={`${getCrewName(booking.crewId)}\n${booking.role}\n${format(parseISO(booking.start), 'HH:mm')} - ${format(parseISO(booking.end), 'HH:mm')}`}
+                        title={`${displayName}\n${booking.role}\n${format(parseISO(booking.start), 'HH:mm')} - ${format(parseISO(booking.end), 'HH:mm')}`}
                       >
                         <div className="h-full px-1.5 sm:px-3 py-0.5 sm:py-1 flex items-center justify-between overflow-hidden">
                           <div className="flex flex-col justify-center min-w-0 flex-1">
                             <span className="text-white text-[10px] sm:text-sm font-semibold truncate drop-shadow-sm">
-                              {getCrewName(booking.crewId)}
+                              {isVehicle ? `🚐 ${displayName}` : displayName}
                             </span>
                             <span className="text-white/80 text-[9px] sm:text-xs truncate drop-shadow-sm hidden sm:block">
                               {booking.role && booking.role !== booking.projectName ? `${booking.role} · ` : ''}
@@ -590,8 +749,9 @@ function Timeline({ crew, bookings, vehicles = [], vehicleBookings = [], dateRan
                         <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10 hidden sm:block">
                           <div className="bg-gray-900 dark:bg-gray-700 text-white text-xs rounded-lg px-3 py-2 shadow-lg whitespace-nowrap">
                             <div className="font-semibold text-sm flex items-center gap-2">
-                              {getCrewName(booking.crewId)}
+                              {isVehicle ? `🚐 ${displayName}` : displayName}
                               {isAppointment && <span className="text-xs text-gray-400">(Kalender)</span>}
+                              {isVehicle && <span className="text-xs text-gray-400">(Fordon)</span>}
                             </div>
                             {booking.role && (
                               <div className="text-gray-300">{booking.role}</div>
@@ -621,7 +781,12 @@ function Timeline({ crew, bookings, vehicles = [], vehicleBookings = [], dateRan
   );
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-x-auto">
+    <div 
+      ref={containerRef}
+      className={`bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-x-auto ${isDragging ? 'cursor-grabbing select-none' : onDateRangeChange ? 'cursor-grab' : ''}`}
+      onMouseDown={onDateRangeChange ? handleMouseDown : undefined}
+      onTouchStart={onDateRangeChange ? handleTouchStart : undefined}
+    >
       {viewMode === 'crew' ? renderCrewView() : renderProjectView()}
 
       {/* Empty state */}

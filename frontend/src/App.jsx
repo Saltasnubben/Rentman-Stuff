@@ -21,6 +21,7 @@ function App() {
   const [showAppointments, setShowAppointments] = useState(true);
   const [showUnfilled, setShowUnfilled] = useState(false);
   const [unfilledPositions, setUnfilledPositions] = useState([]);
+  const [loadingUnfilled, setLoadingUnfilled] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [dateRange, setDateRange] = useState({
     start: startOfDay(new Date()),
@@ -97,6 +98,7 @@ function App() {
       }
 
       try {
+        setLoadingUnfilled(true);
         const response = await fetchUnfilled({
           startDate: dateRange.start,
           endDate: dateRange.end,
@@ -105,6 +107,8 @@ function App() {
       } catch (err) {
         console.error('Failed to load unfilled positions:', err);
         setUnfilledPositions([]);
+      } finally {
+        setLoadingUnfilled(false);
       }
     }
     loadUnfilled();
@@ -297,14 +301,33 @@ function App() {
                   <input
                     type="checkbox"
                     checked={showUnfilled}
-                    onChange={(e) => setShowUnfilled(e.target.checked)}
-                    className="w-4 h-4 text-orange-600 bg-gray-100 border-gray-300 rounded focus:ring-orange-500 dark:focus:ring-orange-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600"
+                    onChange={(e) => {
+                      setShowUnfilled(e.target.checked);
+                      // Byt till projektvy när otillsatta roller aktiveras
+                      if (e.target.checked) {
+                        setViewMode('project');
+                      }
+                    }}
+                    disabled={loadingUnfilled}
+                    className="w-4 h-4 text-orange-600 bg-gray-100 border-gray-300 rounded focus:ring-orange-500 dark:focus:ring-orange-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600 disabled:opacity-50"
                   />
                   <span className="text-sm text-gray-700 dark:text-gray-300 flex items-center gap-1.5">
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
-                    </svg>
-                    Otillsatta roller
+                    {loadingUnfilled ? (
+                      <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                    ) : (
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                      </svg>
+                    )}
+                    {loadingUnfilled ? 'Laddar...' : 'Otillsatta roller'}
+                    {showUnfilled && unfilledPositions.length > 0 && !loadingUnfilled && (
+                      <span className="ml-1 px-1.5 py-0.5 text-xs font-medium bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 rounded-full">
+                        {unfilledPositions.length}
+                      </span>
+                    )}
                   </span>
                 </label>
               </div>
@@ -319,13 +342,14 @@ function App() {
               dateRange={dateRange}
               loading={loading}
               viewMode={viewMode}
+              onDateRangeChange={setDateRange}
             />
           </>
         )}
 
         {/* Stats */}
-        {selectedCrew.length > 0 && bookings.length > 0 && (
-          <div className="mt-6 grid grid-cols-2 sm:grid-cols-5 gap-4">
+        {(selectedCrew.length > 0 && bookings.length > 0) || (showUnfilled && unfilledPositions.length > 0) ? (
+          <div className="mt-6 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-4">
             <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4">
               <div className="text-2xl font-bold text-gray-900 dark:text-white">{selectedCrew.length}</div>
               <div className="text-sm text-gray-500 dark:text-gray-400">Valda crewmedlemmar</div>
@@ -342,6 +366,23 @@ function App() {
               </div>
               <div className="text-sm text-gray-500 dark:text-gray-400">Kalenderbokningar</div>
             </div>
+            {/* Otillsatta roller - visas när showUnfilled är aktiverat */}
+            {showUnfilled && (
+              <>
+                <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-red-200 dark:border-red-800 p-4">
+                  <div className="text-2xl font-bold text-red-600 dark:text-red-400">
+                    {unfilledPositions.filter(p => !p.isTransport).length}
+                  </div>
+                  <div className="text-sm text-gray-500 dark:text-gray-400">Otillsatt personal</div>
+                </div>
+                <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-orange-200 dark:border-orange-800 p-4">
+                  <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">
+                    {unfilledPositions.filter(p => p.isTransport).length}
+                  </div>
+                  <div className="text-sm text-gray-500 dark:text-gray-400">Otillsatta transporter</div>
+                </div>
+              </>
+            )}
             <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4">
               <div className="text-2xl font-bold text-gray-900 dark:text-white">
                 {new Set(bookings.filter(b => b.projectId).map(b => b.projectId)).size}
@@ -355,7 +396,7 @@ function App() {
               <div className="text-sm text-gray-500 dark:text-gray-400">Dagar</div>
             </div>
           </div>
-        )}
+        ) : null}
       </main>
 
       {/* Footer */}

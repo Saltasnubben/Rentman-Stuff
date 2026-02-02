@@ -72,6 +72,20 @@ function handleDebugEndpoint(RentmanClient $rentman, ApiResponse $response): voi
                 ]);
                 break;
                 
+            case 'projectfunction':
+                // Hämta en specifik projektfunktion
+                if (!$id) {
+                    $response->badRequest("id parameter required for projectfunction");
+                    return;
+                }
+                $data = $rentman->get("/projectfunctions/$id");
+                $response->json([
+                    'type' => 'projectfunction',
+                    'all_fields' => $data['data'] ? array_keys($data['data']) : [],
+                    'data' => $data['data'] ?? $data,
+                ]);
+                break;
+                
             default:
                 $response->badRequest("Unknown type: $type. Use: status, project, vehicles, projectvehicle, projecttypes");
         }
