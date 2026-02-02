@@ -99,6 +99,20 @@ try {
             handleVehiclesEndpoint($rentman, $response, $id);
             break;
 
+        case 'subprojects':
+            require __DIR__ . '/endpoints/subprojects.php';
+            handleSubprojectsEndpoint($rentman, $response, $id);
+            break;
+
+        case 'statuses':
+            // Proxy till Rentman /statuses endpoint
+            $statuses = $rentman->fetchAllPages('/statuses', [], 50);
+            $response->json([
+                'data' => $statuses,
+                'count' => count($statuses),
+            ]);
+            break;
+
         case 'cache':
             if ($_SERVER['REQUEST_METHOD'] === 'DELETE' || isset($_GET['clear'])) {
                 $rentman->clearCache();
