@@ -258,15 +258,39 @@ curl -X DELETE https://dindomän.se/api/cache
 
 ---
 
+## Senaste uppdateringar (2026-02-04)
+
+### Nya funktioner
+
+- ✅ **Klickbara bokningar** - Klicka på en bokning för att se detaljerad info (kund, plats, account manager, projektnummer)
+- ✅ **Statusfilter** - Filtrera bokningar efter projektstatus (Bekräftad, Optie, etc)
+- ✅ **Konfliktindikator** - Varning visas när crewmedlemmar har överlappande bokningar
+- ✅ **Förbättrade tooltips** - Visar nu kund och plats direkt i tooltip
+- ✅ **Tangentbordsgenvägar** - Snabbnavigering med piltangenter, T för idag, R för uppdatera, 1-4 för presets
+- ✅ **Mer projektdata från API** - Hämtar nu kund, plats och account manager från Rentman
+
+### Tangentbordsgenvägar
+
+| Tangent | Funktion |
+|---------|----------|
+| ← / → | Navigera dagar |
+| ⇧ + ← / → | Navigera veckor |
+| T | Hoppa till idag |
+| R | Uppdatera data |
+| 1 | Visa 1 dag |
+| 2 | Visa 3 dagar |
+| 3 | Visa 1 vecka |
+| 4 | Visa 2 veckor |
+| Esc | Stäng dialog |
+
 ## Vidareutveckling
 
 Några idéer:
 
 - [ ] Exportera till PDF/Excel
-- [ ] Filtrera på projektstatus
-- [ ] Visa konflikter/dubbelbokningar
-- [ ] Mörkt läge
 - [ ] Webhook-integration för realtidsuppdateringar
+- [ ] Subproject-stöd (olika platser per subprojekt)
+- [ ] Tidrapportering
 
 ---
 

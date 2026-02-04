@@ -115,21 +115,85 @@ function handleBookingsEndpoint(RentmanClient $rentman, ApiResponse $response): 
     $timings['projects_needed'] = count($neededProjectIds);
 
     $projectMap = [];
+    $neededContactIds = [];
 
     foreach (array_keys($neededProjectIds) as $projectId) {
         try {
             $projectData = $rentman->get("/projects/$projectId");
             $project = $projectData['data'] ?? $projectData;
 
+            // Extract contact IDs for later fetching
+            $customerId = null;
+            $locationId = null;
+            $accountManagerId = null;
+            
+            if (!empty($project['customer']) && preg_match('/\/contacts\/(\d+)/', $project['customer'], $m)) {
+                $customerId = $m[1];
+                $neededContactIds[$customerId] = true;
+            }
+            if (!empty($project['location']) && preg_match('/\/contacts\/(\d+)/', $project['location'], $m)) {
+                $locationId = $m[1];
+                $neededContactIds[$locationId] = true;
+            }
+            if (!empty($project['account_manager']) && preg_match('/\/crew\/(\d+)/', $project['account_manager'], $m)) {
+                $accountManagerId = $m[1];
+            }
+
             $projectMap[$projectId] = [
                 'name' => $project['displayname'] ?? $project['name'] ?? 'Unnamed',
+                'number' => $project['number'] ?? null,
                 'color' => $project['color'] ?? null,
                 'status' => $project['planningstate'] ?? $project['status'] ?? null,
+                'customerId' => $customerId,
+                'locationId' => $locationId,
+                'accountManagerId' => $accountManagerId,
+                'accountManagerName' => null, // Will be filled later
             ];
         } catch (Exception $e) {
             error_log("Failed to fetch project $projectId: " . $e->getMessage());
         }
     }
+
+    // STEG 3b: Hämta kontaktnamn för kunder och platser
+    $contactMap = [];
+    foreach (array_keys($neededContactIds) as $contactId) {
+        try {
+            $contactData = $rentman->get("/contacts/$contactId");
+            $contact = $contactData['data'] ?? $contactData;
+            $contactMap[$contactId] = $contact['displayname'] ?? $contact['name'] ?? null;
+        } catch (Exception $e) {
+            error_log("Failed to fetch contact $contactId: " . $e->getMessage());
+        }
+    }
+
+    // Fetch account manager names from crew endpoint
+    $accountManagerIds = array_filter(array_map(fn($p) => $p['accountManagerId'], $projectMap));
+    foreach (array_unique($accountManagerIds) as $amId) {
+        try {
+            $crewData = $rentman->get("/crew/$amId");
+            $crew = $crewData['data'] ?? $crewData;
+            // Update all projects with this account manager
+            foreach ($projectMap as $pId => &$pData) {
+                if ($pData['accountManagerId'] === $amId) {
+                    $pData['accountManagerName'] = $crew['displayname'] ?? $crew['name'] ?? null;
+                }
+            }
+            unset($pData);
+        } catch (Exception $e) {
+            error_log("Failed to fetch crew (AM) $amId: " . $e->getMessage());
+        }
+    }
+
+    // Add contact names to project map
+    foreach ($projectMap as $pId => &$pData) {
+        if ($pData['customerId'] && isset($contactMap[$pData['customerId']])) {
+            $pData['customerName'] = $contactMap[$pData['customerId']];
+        }
+        if ($pData['locationId'] && isset($contactMap[$pData['locationId']])) {
+            $pData['locationName'] = $contactMap[$pData['locationId']];
+        }
+    }
+    unset($pData);
 
     // STEG 4: Bygg bookings med projektinfo
     $timings['step3_done'] = microtime(true) - $t0;
@@ -181,14 +245,32 @@ function handleBookingsEndpoint(RentmanClient $rentman, ApiResponse $response): 
 
         $functionName = $resolvedFunctionName ?? $projectName;
 
+        // Get additional project info
+        $projectNumber = null;
+        $customerName = null;
+        $locationName = null;
+        $accountManagerName = null;
+        
+        if ($projectId && isset($projectMap[$projectId])) {
+            $projInfo = $projectMap[$projectId];
+            $projectNumber = $projInfo['number'] ?? null;
+            $customerName = $projInfo['customerName'] ?? null;
+            $locationName = $projInfo['locationName'] ?? null;
+            $accountManagerName = $projInfo['accountManagerName'] ?? null;
+        }
+
         $allBookings[] = [
             'id' => $assignment['id'],
             'type' => 'project',
             'projectId' => $projectId ? (int)$projectId : null,
             'projectName' => $projectName,
+            'projectNumber' => $projectNumber,
             'projectColor' => $projectColor,
             'color' => $projectColor,
             'projectStatus' => $projectStatus,
+            'customer' => $customerName,
+            'location' => $locationName,
+            'accountManager' => $accountManagerName,
             'crewId' => $crewId,
             'role' => $functionName,
             'start' => $assignment['planperiod_start'],

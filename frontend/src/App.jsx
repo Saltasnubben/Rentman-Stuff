@@ -8,6 +8,9 @@ import Timeline from './components/Timeline';
 import StatusBar from './components/StatusBar';
 import ThemeSelector from './components/ThemeSelector';
 import ViewToggle from './components/ViewToggle';
+import StatusFilter from './components/StatusFilter';
+import KeyboardShortcutsHelp from './components/KeyboardShortcutsHelp';
+import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { fetchCrew, fetchBookings, fetchUnfilled, fetchVehicles, fetchVehicleBookings } from './services/api';
 
 function App() {
@@ -32,6 +35,15 @@ function App() {
   const [error, setError] = useState(null);
   const [apiStatus, setApiStatus] = useState(null);
   const [lastRefresh, setLastRefresh] = useState(null);
+  const [activeStatuses, setActiveStatuses] = useState([]);
+
+  // Keyboard shortcuts
+  useKeyboardShortcuts({
+    dateRange,
+    onDateRangeChange: setDateRange,
+    onRefresh: () => !loading && loadBookings(),
+    enabled: selectedCrew.length > 0 || selectedVehicles.length > 0
+  });
 
   // Load crew members and vehicles on mount
   useEffect(() => {
@@ -171,7 +183,7 @@ function App() {
               </div>
               <div className="min-w-0">
                 <h1 className="text-base sm:text-xl font-bold text-gray-900 dark:text-white truncate">Rentman Booking Visualizer</h1>
-                <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 hidden sm:block">Din livboj i personal-djungeln.</p>
+                <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 hidden sm:block">Din livboj i bokningsträsket.</p>
               </div>
             </div>
             
@@ -205,6 +217,7 @@ function App() {
                   <span className="text-sm text-gray-700 dark:text-gray-300">Auto (30s)</span>
                 </label>
               </div>
+              <KeyboardShortcutsHelp />
               <ThemeSelector />
               <StatusBar status={apiStatus} loading={loading} />
             </div>
@@ -280,24 +293,25 @@ function App() {
         {/* View toggle and Timeline */}
         {(selectedCrew.length > 0 || selectedVehicles.length > 0) && (
           <>
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
               {/* Toggles */}
-              <div className="flex items-center gap-4">
-                <label className="flex items-center gap-2 cursor-pointer select-none">
+              <div className="flex items-center gap-2 sm:gap-4 flex-wrap">
+                <label className="flex items-center gap-1.5 sm:gap-2 cursor-pointer select-none">
                   <input
                     type="checkbox"
                     checked={showAppointments}
                     onChange={(e) => setShowAppointments(e.target.checked)}
                     className="w-4 h-4 text-primary-600 bg-gray-100 border-gray-300 rounded focus:ring-primary-500 dark:focus:ring-primary-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600"
                   />
-                  <span className="text-sm text-gray-700 dark:text-gray-300 flex items-center gap-1.5">
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <span className="text-xs sm:text-sm text-gray-700 dark:text-gray-300 flex items-center gap-1 sm:gap-1.5">
+                    <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                     </svg>
-                    Kalenderbokningar
+                    <span className="hidden sm:inline">Kalenderbokningar</span>
+                    <span className="sm:hidden">Kalender</span>
                   </span>
                 </label>
-                <label className="flex items-center gap-2 cursor-pointer select-none">
+                <label className="flex items-center gap-1.5 sm:gap-2 cursor-pointer select-none">
                   <input
                     type="checkbox"
                     checked={showUnfilled}
@@ -311,20 +325,21 @@ function App() {
                     disabled={loadingUnfilled}
                     className="w-4 h-4 text-orange-600 bg-gray-100 border-gray-300 rounded focus:ring-orange-500 dark:focus:ring-orange-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600 disabled:opacity-50"
                   />
-                  <span className="text-sm text-gray-700 dark:text-gray-300 flex items-center gap-1.5">
+                  <span className="text-xs sm:text-sm text-gray-700 dark:text-gray-300 flex items-center gap-1 sm:gap-1.5">
                     {loadingUnfilled ? (
-                      <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 animate-spin" fill="none" viewBox="0 0 24 24">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                       </svg>
                     ) : (
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
                       </svg>
                     )}
-                    {loadingUnfilled ? 'Laddar...' : 'Otillsatta roller'}
+                    <span className="hidden sm:inline">{loadingUnfilled ? 'Laddar...' : 'Otillsatta roller'}</span>
+                    <span className="sm:hidden">{loadingUnfilled ? '...' : 'Otillsatta'}</span>
                     {showUnfilled && unfilledPositions.length > 0 && !loadingUnfilled && (
-                      <span className="ml-1 px-1.5 py-0.5 text-xs font-medium bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 rounded-full">
+                      <span className="ml-0.5 sm:ml-1 px-1 sm:px-1.5 py-0.5 text-[10px] sm:text-xs font-medium bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 rounded-full">
                         {unfilledPositions.length}
                       </span>
                     )}
@@ -334,9 +349,30 @@ function App() {
 
               <ViewToggle view={viewMode} onChange={setViewMode} />
             </div>
+
+            {/* Status filter */}
+            {bookings.length > 0 && (
+              <div className="mb-4">
+                <StatusFilter
+                  bookings={bookings}
+                  activeStatuses={activeStatuses}
+                  onChange={setActiveStatuses}
+                />
+              </div>
+            )}
+
             <Timeline
               crew={selectedCrew}
-              bookings={[...bookings, ...unfilledPositions, ...vehicleBookings]}
+              bookings={[
+                ...bookings.filter(b => {
+                  if (b.type !== 'project') return true;
+                  if (activeStatuses.length === 0) return true;
+                  const status = (b.projectStatus || 'unknown').toLowerCase();
+                  return activeStatuses.includes(status);
+                }),
+                ...unfilledPositions,
+                ...vehicleBookings
+              ]}
               vehicles={selectedVehicles}
               vehicleBookings={vehicleBookings}
               dateRange={dateRange}

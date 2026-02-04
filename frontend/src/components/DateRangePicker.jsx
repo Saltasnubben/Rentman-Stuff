@@ -95,22 +95,22 @@ function DateRangePicker({ value, onChange, minDays = 1, maxDays = 14 }) {
         </button>
       </div>
 
-      <div className="flex items-center gap-3">
-        <div className="flex-1">
+      <div className="flex items-center justify-center gap-2 sm:gap-3 -ml-3 sm:ml-0">
+        <div className="w-[42%] sm:flex-1 min-w-0">
           <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Från</label>
           <input
             type="date"
             value={startDate}
             onChange={handleStartChange}
-            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+            className="w-full px-2 sm:px-3 py-1.5 sm:py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-xs sm:text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
           />
         </div>
         <div className="flex-shrink-0 text-gray-400 dark:text-gray-500 mt-5">
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
           </svg>
         </div>
-        <div className="flex-1">
+        <div className="w-[42%] sm:flex-1 min-w-0">
           <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Till</label>
           <input
             type="date"
@@ -118,7 +118,7 @@ function DateRangePicker({ value, onChange, minDays = 1, maxDays = 14 }) {
             onChange={handleEndChange}
             min={format(addDays(value.start, minDays), 'yyyy-MM-dd')}
             max={format(addDays(value.start, maxDays), 'yyyy-MM-dd')}
-            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+            className="w-full px-2 sm:px-3 py-1.5 sm:py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-xs sm:text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
           />
         </div>
       </div>
