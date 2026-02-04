@@ -139,11 +139,19 @@ function handleBookingsEndpoint(RentmanClient $rentman, ApiResponse $response): 
                 $accountManagerId = $m[1];
             }
 
+            // Extract status ID if it's a reference
+            $statusId = null;
+            $statusRef = $project['status'] ?? null;
+            if ($statusRef && preg_match('/\/statuses\/(\d+)/', $statusRef, $m)) {
+                $statusId = $m[1];
+            }
+
             $projectMap[$projectId] = [
                 'name' => $project['displayname'] ?? $project['name'] ?? 'Unnamed',
                 'number' => $project['number'] ?? null,
                 'color' => $project['color'] ?? null,
-                'status' => $project['planningstate'] ?? $project['status'] ?? null,
+                'statusId' => $statusId,
+                'statusName' => null, // Will be filled from status endpoint
                 'customerId' => $customerId,
                 'locationId' => $locationId,
                 'accountManagerId' => $accountManagerId,
@@ -191,6 +199,68 @@ function handleBookingsEndpoint(RentmanClient $rentman, ApiResponse $response): 
         }
         if ($pData['locationId'] && isset($contactMap[$pData['locationId']])) {
             $pData['locationName'] = $contactMap[$pData['locationId']];
+        }
+    }
+    unset($pData);
+
+    // STEG 3d: Fetch status names
+    $statusIds = array_filter(array_unique(array_map(fn($p) => $p['statusId'], $projectMap)));
+    $statusMap = [];
+    foreach ($statusIds as $statusId) {
+        try {
+            $statusData = $rentman->get("/statuses/$statusId");
+            $status = $statusData['data'] ?? $statusData;
+            $statusMap[$statusId] = $status['name'] ?? $status['displayname'] ?? null;
+        } catch (Exception $e) {
+            error_log("Failed to fetch status $statusId: " . $e->getMessage());
+        }
+    }
+
+    // Add status names to project map
+    foreach ($projectMap as $pId => &$pData) {
+        if ($pData['statusId'] && isset($statusMap[$pData['statusId']])) {
+            $pData['statusName'] = $statusMap[$pData['statusId']];
+        }
+    }
+    unset($pData);
+
+    // STEG 3e: Fetch subprojects for location info (location is often on subproject level)
+    $subprojectMap = [];
+    foreach (array_keys($neededProjectIds) as $projectId) {
+        try {
+            $subprojectsData = $rentman->get("/projects/$projectId/subprojects");
+            $subprojects = $subprojectsData['data'] ?? [];
+            if (!empty($subprojects)) {
+                // Use the first subproject's location
+                $firstSub = $subprojects[0];
+                $subLocationId = null;
+                if (!empty($firstSub['location']) && preg_match('/\/contacts\/(\d+)/', $firstSub['location'], $m)) {
+                    $subLocationId = $m[1];
+                    if (!isset($contactMap[$subLocationId])) {
+                        // Fetch this contact
+                        try {
+                            $contactData = $rentman->get("/contacts/$subLocationId");
+                            $contact = $contactData['data'] ?? $contactData;
+                            $contactMap[$subLocationId] = $contact['displayname'] ?? $contact['name'] ?? null;
+                        } catch (Exception $e) {
+                            error_log("Failed to fetch contact $subLocationId: " . $e->getMessage());
+                        }
+                    }
+                }
+                $subprojectMap[$projectId] = [
+                    'locationId' => $subLocationId,
+                    'locationName' => $subLocationId ? ($contactMap[$subLocationId] ?? null) : null,
+                ];
+            }
+        } catch (Exception $e) {
+            error_log("Failed to fetch subprojects for project $projectId: " . $e->getMessage());
+        }
+    }
+
+    // Update project map with subproject location if project doesn't have one
+    foreach ($projectMap as $pId => &$pData) {
+        if (empty($pData['locationName']) && isset($subprojectMap[$pId]['locationName'])) {
+            $pData['locationName'] = $subprojectMap[$pId]['locationName'];
         }
     }
     unset($pData);
@@ -250,6 +320,7 @@ function handleBookingsEndpoint(RentmanClient $rentman, ApiResponse $response): 
         $customerName = null;
         $locationName = null;
         $accountManagerName = null;
+        $statusName = null;
         
         if ($projectId && isset($projectMap[$projectId])) {
             $projInfo = $projectMap[$projectId];
@@ -257,6 +328,7 @@ function handleBookingsEndpoint(RentmanClient $rentman, ApiResponse $response): 
             $customerName = $projInfo['customerName'] ?? null;
             $locationName = $projInfo['locationName'] ?? null;
             $accountManagerName = $projInfo['accountManagerName'] ?? null;
+            $statusName = $projInfo['statusName'] ?? null;
         }
 
         $allBookings[] = [
@@ -267,7 +339,7 @@ function handleBookingsEndpoint(RentmanClient $rentman, ApiResponse $response): 
             'projectNumber' => $projectNumber,
             'projectColor' => $projectColor,
             'color' => $projectColor,
-            'projectStatus' => $projectStatus,
+            'projectStatus' => $statusName ?? $projectStatus,
             'customer' => $customerName,
             'location' => $locationName,
             'accountManager' => $accountManagerName,
