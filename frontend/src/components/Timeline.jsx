@@ -14,6 +14,7 @@ import {
 import { sv } from 'date-fns/locale';
 import BookingDetailModal from './BookingDetailModal';
 import ConflictBadge from './ConflictBadge';
+import ConflictModal from './ConflictModal';
 
 // Icon för projektbokningar
 const ProjectIcon = ({ className = "" }) => (
@@ -59,6 +60,9 @@ function Timeline({ crew, bookings, vehicles = [], vehicleBookings = [], dateRan
   // Modal state
   const [selectedBooking, setSelectedBooking] = useState(null);
   const [selectedCrewName, setSelectedCrewName] = useState(null);
+  
+  // Conflict modal state
+  const [conflictModalCrew, setConflictModalCrew] = useState(null);
 
   // Sync vertical scroll between names and timeline
   const handleTimelineScroll = useCallback((e) => {
@@ -523,7 +527,10 @@ function Timeline({ crew, bookings, vehicles = [], vehicleBookings = [], dateRan
                   {member.name}
                 </span>
                 {conflictsByCrew[member.id] > 0 && (
-                  <ConflictBadge count={conflictsByCrew[member.id]} />
+                  <ConflictBadge 
+                    count={conflictsByCrew[member.id]} 
+                    onClick={() => setConflictModalCrew(member)}
+                  />
                 )}
               </div>
             </div>
@@ -728,6 +735,19 @@ function Timeline({ crew, bookings, vehicles = [], vehicleBookings = [], dateRan
           onClose={() => {
             setSelectedBooking(null);
             setSelectedCrewName(null);
+          }}
+        />
+      )}
+
+      {/* Conflict Modal */}
+      {conflictModalCrew && (
+        <ConflictModal
+          crewName={conflictModalCrew.name}
+          bookings={bookings.filter(b => b.crewId === conflictModalCrew.id)}
+          onClose={() => setConflictModalCrew(null)}
+          onBookingClick={(booking) => {
+            setSelectedBooking(booking);
+            setSelectedCrewName(conflictModalCrew.name);
           }}
         />
       )}
