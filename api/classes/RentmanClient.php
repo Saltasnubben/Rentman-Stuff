@@ -23,6 +23,11 @@ class RentmanClient
         if ($cacheTtl > 0 && !is_dir($this->cacheDir)) {
             mkdir($this->cacheDir, 0755, true);
         }
+
+        // Automatisk cache-rensning (1% chans per anrop)
+        if ($cacheTtl > 0 && rand(1, 100) === 1) {
+            $this->pruneExpiredCache();
+        }
     }
 
     /**
@@ -179,5 +184,59 @@ class RentmanClient
         foreach ($files as $file) {
             unlink($file);
         }
+    }
+
+    /**
+     * Rensar utgången cache (filer äldre än cacheTtl)
+     * Körs automatiskt med 1% sannolikhet per request
+     */
+    public function pruneExpiredCache(): int
+    {
+        if ($this->cacheTtl <= 0) {
+            return 0;
+        }
+
+        $files = glob($this->cacheDir . '/*.json');
+        $deleted = 0;
+        $now = time();
+        $maxAge = $this->cacheTtl * 2; // Dubbla TTL innan permanent radering
+
+        foreach ($files as $file) {
+            $mtime = @filemtime($file);
+            if ($mtime && ($now - $mtime) > $maxAge) {
+                @unlink($file);
+                $deleted++;
+            }
+        }
+
+        return $deleted;
+    }
+
+    /**
+     * Returnerar cache-statistik
+     */
+    public function getCacheStats(): array
+    {
+        $files = glob($this->cacheDir . '/*.json');
+        $totalSize = 0;
+        $expiredCount = 0;
+        $now = time();
+
+        foreach ($files as $file) {
+            $totalSize += filesize($file);
+            $mtime = filemtime($file);
+            if (($now - $mtime) > $this->cacheTtl) {
+                $expiredCount++;
+            }
+        }
+
+        return [
+            'totalFiles' => count($files),
+            'expiredFiles' => $expiredCount,
+            'totalSizeBytes' => $totalSize,
+            'totalSizeMB' => round($totalSize / 1024 / 1024, 2),
+            'cacheDir' => $this->cacheDir,
+            'cacheTtlSeconds' => $this->cacheTtl,
+        ];
     }
 }

@@ -97,9 +97,14 @@ try {
         case 'cache':
             if ($_SERVER['REQUEST_METHOD'] === 'DELETE' || isset($_GET['clear'])) {
                 $rentman->clearCache();
-                $response->json(['message' => 'Cache cleared']);
+                $response->json(['message' => 'Cache cleared', 'stats' => $rentman->getCacheStats()]);
+            } elseif (isset($_GET['prune'])) {
+                $deleted = $rentman->pruneExpiredCache();
+                $response->json(['message' => "Pruned $deleted expired cache files", 'stats' => $rentman->getCacheStats()]);
+            } elseif (isset($_GET['stats']) || $_SERVER['REQUEST_METHOD'] === 'GET') {
+                $response->json(['stats' => $rentman->getCacheStats()]);
             } else {
-                $response->badRequest('Use DELETE or ?clear to clear cache');
+                $response->badRequest('Use DELETE, ?clear, ?prune or ?stats');
             }
             break;
 
