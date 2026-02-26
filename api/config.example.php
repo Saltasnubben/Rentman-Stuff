@@ -7,6 +7,11 @@
  */
 
 return [
+    // Lösenordsskydd för hela appen
+    // Sätt till ett valfritt lösenord (t.ex. 'MittLösenord2025')
+    // Lämna tomt ('') för att stänga av lösenordsskydd
+    'app_password' => '',
+
     // Din Rentman API-token
     // Hämta från: Rentman > Configuration > Account > Integrations > API
     'rentman_api_token' => 'YOUR_API_TOKEN_HERE',

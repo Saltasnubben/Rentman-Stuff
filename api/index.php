@@ -10,6 +10,24 @@ set_time_limit(120);
 
 // Felhantering
 error_reporting(E_ALL);
+
+// --- Auth check ---
+// Allow CORS preflight without auth
+if ($_SERVER['REQUEST_METHOD'] !== 'OPTIONS') {
+    $configFileEarly = __DIR__ . '/config.php';
+    if (file_exists($configFileEarly)) {
+        $configEarly = require $configFileEarly;
+        if (!empty($configEarly['app_password'])) {
+            session_start();
+            if (empty($_SESSION['rentman_auth'])) {
+                header('Content-Type: application/json');
+                http_response_code(401);
+                echo json_encode(['error' => 'Unauthorized', 'message' => 'Logga in på /login.php']);
+                exit;
+            }
+        }
+    }
+}
 ini_set('display_errors', 0);
 ini_set('log_errors', 1);
 
@@ -92,6 +110,36 @@ try {
         case 'bookings':
             require __DIR__ . '/endpoints/bookings.php';
             handleBookingsEndpoint($rentman, $response);
+            break;
+
+        case 'vehicles':
+            require __DIR__ . '/endpoints/vehicles.php';
+            handleVehiclesEndpoint($rentman, $response, $id, $subEndpoint);
+            break;
+
+        case 'unfilled':
+            require __DIR__ . '/endpoints/unfilled.php';
+            handleUnfilledEndpoint($rentman, $response);
+            break;
+
+        case 'subprojects':
+            require __DIR__ . '/endpoints/subprojects.php';
+            handleSubprojectsEndpoint($rentman, $response, $id);
+            break;
+
+        case 'statuses':
+            require __DIR__ . '/endpoints/subprojects.php';
+            handleSubprojectsEndpoint($rentman, $response, $id);
+            break;
+
+        case 'debug':
+            require __DIR__ . '/endpoints/debug.php';
+            handleDebugEndpoint($rentman, $response);
+            break;
+
+        case 'warmup':
+            require __DIR__ . '/endpoints/warmup.php';
+            handleWarmupEndpoint($rentman, $response);
             break;
 
         case 'cache':

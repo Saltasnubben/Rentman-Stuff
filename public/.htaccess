@@ -1,11 +1,16 @@
 RewriteEngine On
 
+# Prefer index.php over index.html (auth wrapper)
+DirectoryIndex index.php index.html
+
 # Handle API requests
 RewriteCond %{REQUEST_URI} ^/api
 RewriteRule ^api/(.*)$ api/index.php [L,QSA]
 
-# Handle React SPA - serve index.html for all non-file requests
+# Pass login.php through directly
+RewriteRule ^login\.php$ - [L]
+
+# Handle React SPA — serve index.php (auth wrapper) for all non-file requests
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
-RewriteRule . index.html [L]
-# Trigger redeploy Sat Jan 31 22:55:33 CET 2026
+RewriteRule . index.php [L]
